@@ -1,0 +1,6 @@
+Model,30d Brier Score,Warning Lead Time (days),False Warning Rate (%),Deficit Onsets Caught
+Runway (Survival + Monte Carlo),0.234,22,43%,3/3
+ARIMA(1,1,0),0.283,22,62%,3/3
+Historical Mean Prior (Constant 39%),0.238,0,0%,0/3
+Customer Mean Delay,0.378,2,0%,1/3
+Naive Due-Date,0.389,0,0%,0/3
