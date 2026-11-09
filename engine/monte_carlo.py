@@ -96,6 +96,8 @@ class CashFlowSimulator:
         return self.days_from_uniforms(self.sample_uniforms(customer_ids), payment_probs)
 
     def build_outflows(self, expenses_df: pd.DataFrame, as_of: pd.Timestamp) -> np.ndarray:
+        if len(expenses_df) == 0 or "due_date" not in expenses_df.columns:
+            return np.zeros(self.horizon_days, dtype=float)
         offset = (pd.to_datetime(expenses_df["due_date"]) - as_of).dt.days.to_numpy() - 1
         in_horizon = (offset >= 0) & (offset < self.horizon_days)
         return np.bincount(

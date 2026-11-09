@@ -1,0 +1,50 @@
+{
+  "optimal_penalizer": 0.1,
+  "cv_concordance": 0.7042,
+  "penalizer_grid": {
+    "0.0001": 0.698,
+    "0.001": 0.6979,
+    "0.01": 0.7005,
+    "0.05": 0.704,
+    "0.1": 0.7042,
+    "0.5": 0.7027
+  },
+  "ece": 0.2313,
+  "calibration_bins": [
+    {
+      "bin": "0.0-0.2",
+      "avg_pred": 0.125,
+      "avg_actual": 0.0,
+      "samples": 2,
+      "gap": 0.125
+    },
+    {
+      "bin": "0.2-0.4",
+      "avg_pred": 0.3,
+      "avg_actual": 0.0,
+      "samples": 2,
+      "gap": 0.3
+    },
+    {
+      "bin": "0.4-0.6",
+      "avg_pred": 0.4,
+      "avg_actual": 0.0,
+      "samples": 1,
+      "gap": 0.4
+    },
+    {
+      "bin": "0.6-0.8",
+      "avg_pred": 0.65,
+      "avg_actual": 1.0,
+      "samples": 1,
+      "gap": 0.35
+    },
+    {
+      "bin": "0.8-1.0",
+      "avg_pred": 0.875,
+      "avg_actual": 1.0,
+      "samples": 2,
+      "gap": 0.125
+    }
+  ]
+}
