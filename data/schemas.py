@@ -3,7 +3,7 @@ Data contracts and schema definitions for Runway.
 Both backend modeling and frontend UI rely strictly on these structures.
 """
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional, Tuple
 
 # Canonical categorical values. Import these instead of re-typing the strings.
 SEGMENT_TIER1_OEM = "Tier-1 Auto OEM"
@@ -40,16 +40,18 @@ class RecurringExpense:
 
 @dataclass
 class SimulationResult:
-    trajectories: list         # Matrix of 5000 paths x 60 days
-    dates: List[str]
-    p_deficit_14d: float       # Probability of cash <= 0 within 14 days
+    trajectories: Any          # np.ndarray (n_simulations, horizon_days): closing cash per path per day
+    dates: List[str]           # YYYY-MM-DD for each trajectory column (day 1 = day after as-of)
+    p_deficit_14d: float       # Probability of cash < 0 at any point within 14 days
     p_deficit_30d: float       # Probability within 30 days
     p_deficit_60d: float       # Probability within 60 days
-    expected_shortfall_date: Optional[str]
+    expected_shortfall_date: Optional[str]  # Median first-deficit date among paths that go negative
     p10_trajectory: List[float]
     p50_trajectory: List[float]
     p90_trajectory: List[float]
     top_risk_invoices: List[dict] # [{invoice_id, customer, amount, marginal_risk_reduction}, ...]
+    shortfall_window_days: Optional[Tuple[int, int]] = None  # P10-P90 of first deficit day, e.g. (18, 27)
+    shortfall_window_dates: Optional[Tuple[str, str]] = None  # Same window as YYYY-MM-DD dates
 
 @dataclass
 class ActionRecommendation:

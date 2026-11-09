@@ -47,7 +47,7 @@ DURATION_COL = "duration"
 EVENT_COL = "event"
 REFERENCE_SEGMENT = CUSTOMER_SEGMENTS[0]  # dropped from the one-hot to avoid collinearity
 SEGMENT_DUMMIES = [f"seg_{s.lower().replace('-', '_').replace(' ', '_')}" for s in CUSTOMER_SEGMENTS[1:]]
-FEATURE_COLUMNS: List[str] = ["log_amount", *SEGMENT_DUMMIES, "payment_terms_days", "past_avg_delay"]
+FEATURE_COLUMNS: List[str] = ["log_amount", *SEGMENT_DUMMIES, "payment_terms_days", "past_avg_delay", "is_disputed"]
 _S_EVAL_EPS = 1e-9
 
 
@@ -88,6 +88,7 @@ class InvoiceSurvivalModel:
         # Cold start: no payment history yet -> segment-level empirical prior.
         prior = df["customer_segment"].map(self.segment_prior_delay_).fillna(self.global_prior_delay_)
         X["past_avg_delay"] = df["customer_past_avg_delay"].astype(float).fillna(prior)
+        X["is_disputed"] = df["is_disputed"].astype(float)
         return X[FEATURE_COLUMNS]
 
     # ------------------------------------------------------------------ #
@@ -97,7 +98,7 @@ class InvoiceSurvivalModel:
         """Fit on paid invoices (events) plus invoices still unpaid (right-censored).
 
         Requires columns: delay_days, event_observed, customer_segment, amount,
-        payment_terms_days, customer_past_avg_delay.
+        payment_terms_days, customer_past_avg_delay, is_disputed.
         """
         df = historical_df.copy()
         event = df["event_observed"].astype(bool)
