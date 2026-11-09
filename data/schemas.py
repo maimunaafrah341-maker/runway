@@ -5,11 +5,23 @@ Both backend modeling and frontend UI rely strictly on these structures.
 from dataclasses import dataclass
 from typing import List, Optional
 
+# Canonical categorical values. Import these instead of re-typing the strings.
+SEGMENT_TIER1_OEM = "Tier-1 Auto OEM"
+SEGMENT_MID_TIER = "Mid-tier Supplier"
+SEGMENT_RETAIL = "Retail Distributor"
+CUSTOMER_SEGMENTS = (SEGMENT_TIER1_OEM, SEGMENT_MID_TIER, SEGMENT_RETAIL)
+
+EXPENSE_PAYROLL = "Payroll"
+EXPENSE_GST_TAX = "GST/Tax (GSTR-3B)"
+EXPENSE_RAW_MATERIAL = "Raw Material"
+EXPENSE_EMI_RENT = "EMI/Rent"
+EXPENSE_CATEGORIES = (EXPENSE_PAYROLL, EXPENSE_GST_TAX, EXPENSE_RAW_MATERIAL, EXPENSE_EMI_RENT)
+
 @dataclass
 class InvoiceRecord:
     invoice_id: str
     customer_id: str
-    customer_segment: str      # 'Tier-1 Enterprise', 'Mid-tier OEM', 'Retailer'
+    customer_segment: str      # One of CUSTOMER_SEGMENTS
     amount: float              # In INR (₹)
     issue_date: str            # YYYY-MM-DD
     due_date: str              # YYYY-MM-DD
@@ -21,7 +33,7 @@ class InvoiceRecord:
 @dataclass
 class RecurringExpense:
     expense_id: str
-    category: str              # 'Payroll', 'GST/Tax (GSTR-3B)', 'Raw Material', 'EMI/Rent'
+    category: str              # One of EXPENSE_CATEGORIES
     amount: float
     due_date: str              # YYYY-MM-DD
     is_flexible: bool          # Can payment be delayed by 7 days without shutdown?
