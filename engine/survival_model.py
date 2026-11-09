@@ -190,12 +190,16 @@ class InvoiceSurvivalModel:
         if len(open_invoices_df) == 0:
             return np.zeros((0, max_horizon_days))
 
-        t_eval = np.maximum(self._days_past_due(open_invoices_df, as_of_date) + self.offset_, 0).astype(int)
-        S = self.survival_on_grid(open_invoices_df, int(t_eval.max()) + max_horizon_days)
+        # Model-time of the evaluation date; negative for invoices not yet near their due
+        # date. Lookups are clipped at t = 0 where S = 1 (no payment possible yet), but the
+        # horizon is NOT shifted: day k after evaluation is model-time t_eval + k.
+        t_eval = (self._days_past_due(open_invoices_df, as_of_date) + self.offset_).astype(int)
+        max_t = max(int(t_eval.max()) + max_horizon_days, 1)
+        S = self.survival_on_grid(open_invoices_df, max_t)
 
         rows = np.arange(len(open_invoices_df))[:, None]
-        cols = t_eval[:, None] + np.arange(1, max_horizon_days + 1)[None, :]
-        s_eval = S[np.arange(len(t_eval)), t_eval][:, None]
+        cols = np.clip(t_eval[:, None] + np.arange(1, max_horizon_days + 1)[None, :], 0, max_t)
+        s_eval = S[np.arange(len(t_eval)), np.clip(t_eval, 0, max_t)][:, None]
         s_future = S[rows, cols]
         with np.errstate(divide="ignore", invalid="ignore"):
             cdf = np.where(s_eval > _S_EVAL_EPS, (s_eval - s_future) / s_eval, 0.0)
@@ -252,6 +256,11 @@ if __name__ == "__main__":
     p_probe = model.predict_cumulative_payment_prob(probe, 60)
     print(f"Same invoice, P(paid within 30d): due in 10 days -> {p_probe[0, 29]:.2f}, "
           f"30 days overdue -> {p_probe[1, 29]:.2f}")
+    # Regression: an invoice due beyond (horizon + earliest-ever early payment) cannot be paid
+    # within the horizon; its curve must not be pulled forward.
+    far = open_inv.iloc[[0]].copy()
+    far["delay_days"] = -(model.offset_ + 30)
+    assert model.predict_cumulative_payment_prob(far, 30)[0, -1] == 0.0, "not-yet-due curve shifted forward"
     print("All self-test assertions passed.")
 
     # --- sample curves ---

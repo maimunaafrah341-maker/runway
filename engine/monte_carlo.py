@@ -60,27 +60,40 @@ class CashFlowSimulator:
         self.rho = rho
         self.seed = seed
         # Populated by run(), for downstream modules (optimizer, UI drill-downs).
+        self.uniforms_: Optional[np.ndarray] = None       # (n_sims, n_invoices) copula draws U_i
+        self.payment_probs_: Optional[np.ndarray] = None  # (n_invoices, horizon_days) CDFs used
         self.payment_days_: Optional[np.ndarray] = None   # (n_sims, n_invoices); horizon_days = not paid
+        self.trajectories_: Optional[np.ndarray] = None   # (n_sims, horizon_days)
         self.outflows_: Optional[np.ndarray] = None       # (horizon_days,)
+        self.open_invoice_ids_: Optional[List[str]] = None
         self.risk_table_: Optional[pd.DataFrame] = None   # counterfactual result for every open invoice
 
     # ------------------------------------------------------------------ #
     # Building blocks
     # ------------------------------------------------------------------ #
-    def sample_payment_days(self, customer_ids: pd.Series, payment_probs: np.ndarray) -> np.ndarray:
-        """Simulated arrival day index per (path, invoice); horizon_days means not paid in horizon."""
+    def sample_uniforms(self, customer_ids: pd.Series) -> np.ndarray:
+        """Gaussian-copula uniforms U (n_sims, n_invoices), correlated within each customer."""
         rng = np.random.default_rng(self.seed)
         cust_codes, uniques = pd.factorize(customer_ids)
-        n_inv = len(cust_codes)
         z = rng.standard_normal((self.n_simulations, len(uniques)))
-        eps = rng.standard_normal((self.n_simulations, n_inv))
-        u = ndtr(np.sqrt(self.rho) * z[:, cust_codes] + np.sqrt(1.0 - self.rho) * eps)
+        eps = rng.standard_normal((self.n_simulations, len(cust_codes)))
+        return ndtr(np.sqrt(self.rho) * z[:, cust_codes] + np.sqrt(1.0 - self.rho) * eps)
 
-        days = np.empty((self.n_simulations, n_inv), dtype=np.int64)
-        for i in range(n_inv):
-            # First d with CDF_i[d] >= U (CDF is non-decreasing); H if none.
-            days[:, i] = np.searchsorted(payment_probs[i], u[:, i], side="left")
+    @staticmethod
+    def days_from_uniforms(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
+        """First day index d with CDF[d] >= U (CDF non-decreasing); len(cdf) means not paid.
+
+        `u` is (n_sims,) with `cdf` (H,), or (n_sims, n) with `cdf` (n, H)."""
+        if u.ndim == 1:
+            return np.searchsorted(cdf, u, side="left")
+        days = np.empty(u.shape, dtype=np.int64)
+        for i in range(u.shape[1]):
+            days[:, i] = np.searchsorted(cdf[i], u[:, i], side="left")
         return days
+
+    def sample_payment_days(self, customer_ids: pd.Series, payment_probs: np.ndarray) -> np.ndarray:
+        """Simulated arrival day index per (path, invoice); horizon_days means not paid in horizon."""
+        return self.days_from_uniforms(self.sample_uniforms(customer_ids), payment_probs)
 
     def build_outflows(self, expenses_df: pd.DataFrame, as_of: pd.Timestamp) -> np.ndarray:
         offset = (pd.to_datetime(expenses_df["due_date"]) - as_of).dt.days.to_numpy() - 1
@@ -147,6 +160,7 @@ class CashFlowSimulator:
         payment_probs: np.ndarray,
         expenses_df: pd.DataFrame,
         as_of_date: str,
+        compute_risk_drivers: bool = True,
     ) -> SimulationResult:
         """Simulate cash paths from `as_of_date` and attribute 30-day deficit risk.
 
@@ -158,6 +172,7 @@ class CashFlowSimulator:
                 open_invoices_df (InvoiceSurvivalModel.predict_cumulative_payment_prob).
             expenses_df: obligations with due_date and amount; only those in the horizon count.
             as_of_date: evaluation date, YYYY-MM-DD.
+            compute_risk_drivers: run the per-invoice counterfactuals (skip for backtests).
         """
         open_invoices_df = open_invoices_df.reset_index(drop=True)
         payment_probs = np.asarray(payment_probs, dtype=float)
@@ -168,7 +183,8 @@ class CashFlowSimulator:
         H = self.horizon_days
 
         amounts = open_invoices_df["amount"].to_numpy(dtype=float)
-        payment_days = self.sample_payment_days(open_invoices_df["customer_id"], payment_probs)
+        uniforms = self.sample_uniforms(open_invoices_df["customer_id"])
+        payment_days = self.days_from_uniforms(uniforms, payment_probs)
         inflows = self.build_inflows(payment_days, amounts)
         outflows = self.build_outflows(expenses_df, as_of)
         trajectories = initial_cash + np.cumsum(inflows - outflows[None, :], axis=1)
@@ -187,8 +203,11 @@ class CashFlowSimulator:
             window_dates = (dates[lo - 1], dates[hi - 1])
             shortfall_date = dates[med - 1]
 
-        risk = self._counterfactual_risk(trajectories, payment_days, open_invoices_df, as_of)
-        top = risk[risk["marginal_risk_reduction"] > 0].head(TOP_K_RISK_DRIVERS)
+        risk = None
+        top = pd.DataFrame(columns=["marginal_risk_reduction"])
+        if compute_risk_drivers and len(open_invoices_df):
+            risk = self._counterfactual_risk(trajectories, payment_days, open_invoices_df, as_of)
+            top = risk[risk["marginal_risk_reduction"] > 0].head(TOP_K_RISK_DRIVERS)
         top_risk_invoices: List[dict] = [
             {
                 "invoice_id": r.invoice_id,
@@ -202,7 +221,9 @@ class CashFlowSimulator:
             for r in top.itertuples(index=False)
         ]
 
-        self.payment_days_, self.outflows_, self.risk_table_ = payment_days, outflows, risk
+        self.uniforms_, self.payment_probs_, self.payment_days_ = uniforms, payment_probs, payment_days
+        self.trajectories_, self.outflows_, self.risk_table_ = trajectories, outflows, risk
+        self.open_invoice_ids_ = open_invoices_df["invoice_id"].tolist()
         p10, p50, p90 = np.percentile(trajectories, [10, 50, 90], axis=0)
         return SimulationResult(
             trajectories=trajectories,

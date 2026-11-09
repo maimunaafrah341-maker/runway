@@ -57,7 +57,7 @@ class SimulationResult:
 class ActionRecommendation:
     invoice_id: str
     customer_id: str
-    action_type: str           # 'DIRECT_CHASE', 'CASH_DISCOUNT_2%', 'SPLIT_PAYMENT'
+    action_type: str           # 'DIRECT_CHASE', 'EARLY_DISCOUNT_2%', 'SPLIT_PAYMENT', 'LEGAL_MSMED_NOTICE'
     description: str
     expected_shortfall_avoided: float  # In ₹
     cost_of_action: float              # In ₹
