@@ -209,49 +209,98 @@ Requirements:
 
 ### --- PERSON 2 PROMPTS (Streamlit UI & Product Experience) ---
 
-#### Prompt 2.1: Streamlit Layout & Visual Identity (`app/main.py`)
+#### Prompt 2.1: Sleek Dark Mode Layout & Visual Hierarchy (`app/main.py`)
 ```markdown
-Context: Build the presentation dashboard for Runway: Transaction-Aware Cash-Shortfall Early Warning for MSME Manufacturers.
-Task: Create `app/main.py` using Streamlit and Plotly.
+Context: Build the presentation web dashboard for "Runway" (PS-04: Transaction-Aware Cash-Shortfall Early Warning for MSME Manufacturers).
+Design Aesthetic: High-end institutional fintech (inspired by Stripe, Mercury Treasury, Linear). Deep slate dark mode, neon cyan data lines, sharp typography, and glowing risk indicators.
 
-Requirements:
-1. Visual Header:
-   - Title: "Runway (Predict. Explain. Act.)"
-   - Subtitle: "Cash-Shortfall Early Warning System for MSME Manufacturers | PS-04"
-   - Top Metric Bar:
-     - Metric 1: Current Cash In Hand (₹)
-     - Metric 2: 14-Day Shortfall Risk (%) [Color green if <20%, amber if 20-50%, red if >50%]
-     - Metric 3: 30-Day Shortfall Risk (%)
-     - Metric 4: Projected Deficit Window (e.g. "Day 19 – Day 26")
-2. Three Core Sections corresponding to the pitch:
-   - Tab 1: "1. PREDICT (Cash Flow Horizon)"
-   - Tab 2: "2. EXPLAIN (Top Risk Drivers)"
-   - Tab 3: "3. ACT (Prioritized Interventions)"
-   - Tab 4: "EVALUATION (Baselines & Calibration)"
-3. Sidebar controls:
-   - Select Scenario: "Normal Operations", "Major OEM Delay (Tata Auto)", "End of Quarter Crunch".
-   - Slider: "Starting Cash Buffer (₹ Lakhs)".
-   - Button: "Run 5,000-Path Monte Carlo Simulation".
+Task: Create `app/main.py` using Streamlit and custom CSS.
+
+Visual & Layout Specifications (Match Reference Design Exactly):
+1. Color Palette & Styling (via st.markdown custom CSS):
+   - Background: Deep obsidian/slate `#0B0F17`
+   - Card Surfaces: Deep charcoal `#131B2A` / `#162032` with subtle 1px border `#1E293B` and border-radius 12px
+   - Accent Cyan: `#06B6D4` / `#00E5FF`
+   - Positive/Safe: Emerald green `#10B981`
+   - Critical Alert: Coral red `#EF4444` / badge background `rgba(239, 68, 68, 0.2)`
+   - Warning/Attention: Amber yellow `#F59E0B`
+   - Text: Primary `#F8FAFC`, secondary/labels `#94A3B8`
+
+2. Top Navigation Bar:
+   - Left: Runway logo with cyan bar-chart icon + subtitle "PREDICT. EXPLAIN. ACT." in small tracked caps.
+   - Right: Two pills:
+     * Company Badge: "Sri Lakshmi Auto Components Pvt Ltd | ₹12.6 Cr annual turnover"
+     * Live Status Pill: Green pulsing dot + "Live · 5,000-Path Simulation"
+
+3. Executive Greeting Header:
+   - Small Cyan Eyebrow: "CASH INTELLIGENCE / LIVE OUTLOOK"
+   - Main Headline: "Good morning, Raghav."
+   - Subtitle: "Your cash position needs attention this week."
+   - Right-aligned Clock Tag: "As of Jan 01, 2026 · 09:42 IST"
+
+4. Top Metric Ribbon (4 Key Risk Cards):
+   - Card 1: CASH BALANCE TODAY
+     * Value: "₹9.22 Lakhs" (bold, 28px)
+     * Delta: "↑ ₹1.14L vs. 7 days ago" (emerald green)
+     * Subtle cyan accent line on bottom card border
+   - Card 2: 14-DAY SHORTFALL RISK
+     * Value: "86.6%"
+     * Header Icon: Red warning triangle
+     * Badges: Red pill "[HIGH RISK]" + "↑ 18.2 pts this week"
+   - Card 3: 30-DAY SHORTFALL RISK
+     * Value: "89.0%"
+     * Header Icon: Red warning triangle
+     * Badges: Red pill "[CRITICAL ALERT]" + grey pill "[Action required]"
+   - Card 4: DEFICIT DANGER WINDOW
+     * Value: "Jan 07 – Jan 10"
+     * Header Icon: Calendar icon
+     * Subtext: "Trigger: Payroll + Vendor Dues" (yellow "Trigger:")
+
+5. Tab Navigation:
+   - Tab 1: "01 PREDICT · Cash flow horizon" (active cyan bottom border)
+   - Tab 2: "02 EXPLAIN · Risk drivers"
+   - Tab 3: "03 ACT · Interventions"
+   - Tab 4: "04 BENCHMARK · Evaluation"
+
+6. Backend Data Hookup:
+   - Simply call `from engine import run_runway_pipeline`
+   - `sim_result, actions, simulator = run_runway_pipeline()`
+   - All metric values and forecasts populate live in under 0.3 seconds.
 ```
 
-#### Prompt 2.2: Interactive Fan Chart & Risk Waterfall (`app/components/`)
+#### Prompt 2.2: 60-Day Plotly Cash Fan Chart & Risk Waterfall (`app/components/`)
 ```markdown
-Context: Implement rich visualizations for Runway's Predict and Explain tabs.
+Context: Implement the visual centerpiece of Runway: the 60-day probabilistic cash horizon fan chart.
 Task: Create `app/components/fan_chart.py` and `app/components/risk_drivers.py`.
 
-Requirements:
+Requirements (Match Reference Screenshot Exactly):
 1. `fan_chart.py`:
-   - Plotly chart displaying:
-     - 60-day horizon on X-axis with actual dates.
-     - P50 (median) cash trajectory line in bold navy blue.
-     - P10 to P90 shaded confidence cone (soft blue gradient).
-     - Horizontal dashed red line at Cash = 0 (Deficit Danger Line).
-     - Visual red highlight zone marking the date range where P10 drops below ₹0.
-     - Annotations for major known outflow spikes (e.g., "GST Outflow ₹4.2L on 20th", "Payroll ₹6.5L on 1st").
-2. `risk_drivers.py`:
-   - Horizontal bar chart showing the Top-5 Invoices contributing to the shortfall.
-   - Each bar displays: Customer Name, Invoice #, Invoice Amount (₹), and Risk Contribution (% marginal drop in shortfall probability).
-   - Clickable or expandable details showing historical payment track record and days overdue.
+   - Header Bar:
+     * Title: "60-Day Cash Flow Horizon" + cyan pill "[AI FORECAST]"
+     * Subtext: "Monte Carlo forecast · 5,000 paths · Updated 2 minutes ago"
+     * Top-right Legend: Cyan line "Median (P50)", Blue block "Confidence (P10–P90)", Red dashed "Deficit line"
+   - Plotly Chart Aesthetics:
+     * Dark theme: paper_bgcolor='#131B2A', plot_bgcolor='#131B2A'
+     * X-axis: 60-day timeline with tick marks at Jan 01, Jan 11, Jan 21, Jan 31, Feb 10, Feb 20, Mar 01
+     * Y-axis: Formatted in Indian Lakhs: -₹10L, -₹5L, ₹0, ₹5L, ₹10L, ₹15L
+     * Deficit Line: Horizontal dashed red line at ₹0 with badge "₹0 DEFICIT LINE"
+     * Deficit Shaded Zone: Red translucent vertical rectangle spanning Jan 07 to Jan 10 highlighting the deficit window
+     * Confidence Cone (P10 to P90): Filled with translucent blue `rgba(6, 182, 212, 0.15)` and dashed boundary lines
+     * Median Trajectory (P50): Bold neon cyan curve `#00E5FF` (width: 3.5) with soft glow effect
+     * Exact 3 Event Callout Pins:
+       - Jan 07: Dark slate tooltip pill "JAN 07 · FACTORY WAGES | - ₹4.50L" (cyan anchor pin)
+       - Jan 10: Dark slate tooltip pill "JAN 10 · RAW MATERIAL | - ₹6.80L" (amber anchor pin)
+       - Jan 20: Grey tooltip pill "JAN 20 · GSTR-3B TAX" (dashed line anchor)
+   - Bottom 3 Summary Metric Cards:
+     * Card A: LOWEST PROJECTED P50: "-₹2.64L" (Coral red text) | Subtext: "January 08"
+     * Card B: RECOVERY EXPECTED: "January 11" (Emerald green text) | Subtext: "After Brahmaputra receipt"
+     * Card C: FORECAST CONFIDENCE: "High · 91%" (White text) | Subtext: "Based on 24-month history"
+
+2. `risk_drivers.py` (Tab 2: EXPLAIN):
+   - Horizontal bar chart displaying the Top-5 Risk Invoices from `sim_result.top_risk_invoices`.
+   - Each bar shows: Customer Name, Invoice #, Invoice Amount (₹), and Marginal Risk Reduction %.
+   - Buyer Concentration Alert Box:
+     "⚠️ Buyer Concentration Warning: Brahmaputra Mobility Ltd accounts for 3 of the top 5 delayed receivables (₹17.5L combined exposure). Joint frailty simulation reveals their bureaucratic approval cycle is the primary driver of the Jan 07–10 shortfall."
 ```
 
 #### Prompt 2.3: Actionable Decision Cards & Vernacular Alerts (`app/components/`)
