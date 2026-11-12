@@ -19,7 +19,7 @@ causing it, and what to do first** — ranked in rupees.
 | **Explain** | *Which invoices are driving the risk?* | Counterfactual attribution: re-run the simulation as if invoice *k* were paid on time |
 | **Act** | *What should I do first?* | Every candidate action ranked by `E[shortfall avoided] − cost of action` |
 | **Prove** | *Is it better than a spreadsheet?* | Rolling no-look-ahead backtest against 3 baselines, scored by Brier score and warning lead time |
-| **Ask** | *Can I legally charge this customer interest?* | RAG over the MSMED Act 2006 + the business's own invoices; Claude writes the answer online, a built-in answer works offline |
+| **Ask** | *Can I legally charge this customer interest?* | RAG over the MSMED Act 2006 + the business's own invoices; Gemini or Claude writes the answer online, a built-in answer works offline |
 
 ---
 
@@ -72,10 +72,18 @@ python demo.py                   # end-to-end CLI walkthrough (~35 s)
 streamlit run app/main.py        # dashboard
 ```
 
-**Optional: turn on Claude for the Ask tab.** Without a key the legal assistant runs fully offline.
-To let Claude write the answers, set `ANTHROPIC_API_KEY` as an environment variable, or put
-`ANTHROPIC_API_KEY = "sk-ant-..."` in `.streamlit/secrets.toml` (git-ignored). On Streamlit Cloud,
-add the same line under *App settings → Secrets*.
+**Optional: let an AI model write the Ask tab's answers.** Without a key the legal assistant runs fully
+offline. Add either key (or both, and pick in the app) to `.streamlit/secrets.toml` (git-ignored), as an
+environment variable, or on Streamlit Cloud under *App settings → Secrets*:
+
+```toml
+GEMINI_API_KEY = "AIza..."      # free key from aistudio.google.com; model defaults to gemini-3.6-flash
+# GEMINI_MODEL = "gemini-3.5-flash-lite"   # optional override, e.g. for a higher free-tier quota
+ANTHROPIC_API_KEY = "sk-ant-..."  # Claude Opus 5.5, paid
+```
+
+Google may use prompts sent on Gemini's free tier to improve its products; use a paid tier for real
+company data.
 
 > **pandas is pinned below 3.0.** On some Windows machines, Application Control blocks the pandas 3.x
 > DLLs; 2.x works everywhere we tested. The same policy can block new `pyarrow` builds (the dashboard
@@ -215,9 +223,10 @@ The *Ask* tab answers questions such as *"Can I legally charge Vindhya interest?
    the Section 16 interest on each ([`interest.py`](assistant/interest.py)). That interest is compound with
    monthly rests at 3 × the RBI Bank Rate, starting the day after the agreed date, capped at 45 days
    (Section 15). The 30-day forecast is added too.
-3. **Generate.** With an `ANTHROPIC_API_KEY`, Claude Opus 5.5 writes the answer from those passages and
-   numbers only, citing sections like `[Sec 16]`, in the language of the question. Without a key, or
-   when the network fails, a template answer is built from the same passages and numbers
+3. **Generate.** With a `GEMINI_API_KEY` (Gemini 3.6 Flash, called over plain HTTPS) or an
+   `ANTHROPIC_API_KEY` (Claude Opus 5.5), the model writes the answer from those passages and numbers
+   only, citing sections like `[Sec 16]`, in the language of the question. Without a key, or when the
+   network or API fails, a template answer is built from the same passages and numbers
    ([`advisor.py`](assistant/advisor.py)).
 
 Every answer lists its sources, with the statute text and the ledger numbers it used. The cash forecast
@@ -235,7 +244,7 @@ runway/
 │   ├── legal_corpus.py        MSMED Act 2006 text (Secs 2, 8, 15–24) + dated notes
 │   ├── retriever.py           BM25 search with everyday / Hinglish synonyms
 │   ├── interest.py            Section 16 interest per unpaid invoice
-│   └── advisor.py             Grounding facts, offline answers, Claude streaming
+│   └── advisor.py             Grounding facts, offline answers, Gemini / Claude streaming
 ├── .streamlit/config.toml     Dark theme for the dashboard
 ├── data/
 │   ├── schemas.py             Shared dataclasses + segment / expense constants

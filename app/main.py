@@ -23,8 +23,10 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
-from assistant import (CLAUDE_LABEL, BusinessContext, cited_passages, offline_answer, prepare,
-                       stream_claude_answer)
+import requests
+
+from assistant import (CLAUDE_LABEL, GEMINI_DEFAULT_MODEL, BusinessContext, GeminiError, cited_passages,
+                       gemini_label, offline_answer, prepare, stream_claude_answer, stream_gemini_answer)
 from assistant.legal_corpus import BANK_RATE, BANK_RATE_CHECKED, MSMED_RATE, PASSAGE_BY_ID
 from data.generator import generate_msme_ledger, reconstruct_cash_history
 from data.schemas import EXPENSE_EMI_RENT, EXPENSE_GST_TAX, EXPENSE_PAYROLL, EXPENSE_RAW_MATERIAL
@@ -877,7 +879,7 @@ with tab_eval:
     )
 
 # --------------------------------------------------------------------------- #
-# TAB 5: ASK (legal assistant: retrieval over the MSMED Act + the ledger, answer by Claude or offline)
+# TAB 5: ASK (legal assistant: retrieval over the MSMED Act + the ledger, answer by Gemini, Claude or offline)
 # --------------------------------------------------------------------------- #
 LEGAL_SUGGESTIONS = {
     ":material/currency_rupee: Can I legally charge Vindhya interest?": "Can I legally charge Vindhya interest?",
@@ -895,15 +897,42 @@ legal_ctx = BusinessContext(
 )
 
 
-def anthropic_api_key() -> str | None:
-    """Key from Streamlit secrets (cloud) or the environment (local). None means offline mode."""
-    if anthropic is None:
-        return None
+def secret(name: str) -> str | None:
+    """A setting from Streamlit secrets (cloud) or the environment (local)."""
     try:
-        key = st.secrets.get("ANTHROPIC_API_KEY")
+        value = st.secrets.get(name)
     except StreamlitSecretNotFoundError:
-        key = None
-    return key or os.environ.get("ANTHROPIC_API_KEY") or None
+        value = None
+    return value or os.environ.get(name) or None
+
+
+def online_writers() -> dict:
+    """Models that can write answers, by display name. Empty means offline mode only."""
+    writers = {}
+    gemini_key = secret("GEMINI_API_KEY") or secret("GOOGLE_API_KEY")
+    if gemini_key:
+        model = secret("GEMINI_MODEL") or GEMINI_DEFAULT_MODEL
+        writers[gemini_label(model)] = {"kind": "gemini", "key": gemini_key, "model": model}
+    claude_key = secret("ANTHROPIC_API_KEY") if anthropic is not None else None
+    if claude_key:
+        writers[CLAUDE_LABEL] = {"kind": "claude", "key": claude_key}
+    return writers
+
+
+# Empty tuples when the Anthropic SDK is missing, so these except clauses never touch a None module.
+CLAUDE_AUTH_ERRORS = (anthropic.AuthenticationError,) if anthropic else ()
+CLAUDE_NET_ERRORS = (anthropic.APIConnectionError,) if anthropic else ()
+CLAUDE_API_ERRORS = (anthropic.APIStatusError,) if anthropic else ()
+
+
+def gemini_problem(err: GeminiError) -> str:
+    if err.status_code == 429:
+        return "Gemini's free-tier limit is used up for now, so this is the offline answer."
+    if err.status_code in (401, 403) or "API key" in err.message:
+        return "The Gemini API key was rejected, so this is the offline answer."
+    if err.status_code == 404:
+        return "That Gemini model name was not found (check GEMINI_MODEL), so this is the offline answer."
+    return f"Gemini returned an error ({err.status_code}), so this is the offline answer."
 
 
 def render_sources(pids: list, facts_text: str) -> None:
@@ -920,7 +949,7 @@ def render_sources(pids: list, facts_text: str) -> None:
 
 
 def render_answer_footer(m: dict) -> None:
-    how = (f"Written by {CLAUDE_LABEL} from the sections below" if m["mode"] == "claude"
+    how = (f"Written by {m['writer']} from the sections below" if m["mode"] == "online"
            else "Offline answer built from the sections below (no internet used)")
     st.caption(how)
     render_sources(m["sources"], m["facts"])
@@ -928,22 +957,29 @@ def render_answer_footer(m: dict) -> None:
 
 @st.fragment
 def legal_assistant() -> None:
-    key = anthropic_api_key()
+    writers = online_writers()
     msgs = st.session_state.setdefault("legal_chat", [])
 
     top_l, top_m, top_r = st.columns([5, 4, 1.4], vertical_alignment="center")
     with top_m:
-        use_claude = st.toggle(
-            f"Online: {CLAUDE_LABEL} writes the answer", value=bool(key), disabled=not key, key="legal_online",
+        online = st.toggle(
+            "Online: an AI model writes the answer", value=bool(writers), disabled=not writers,
+            key="legal_online",
             help="Off = offline mode. The same law sections and numbers are used, and the answer is built "
                  "without any internet. Turn off if the venue Wi-Fi is unreliable.",
         )
+        writer_name = None
+        if online and len(writers) > 1:
+            writer_name = st.segmented_control("Answer written by", list(writers), default=list(writers)[0],
+                                               required=True, key="legal_writer", label_visibility="collapsed")
+        elif online:
+            writer_name = next(iter(writers))
     with top_l:
-        if use_claude:
+        if online and writer_name:
             st.markdown(f'<span class="badge-pill"><span class="live-dot"></span>Online · searches the Act, then '
-                        f'{CLAUDE_LABEL} writes the answer</span>', unsafe_allow_html=True)
+                        f'{writer_name} writes the answer</span>', unsafe_allow_html=True)
         else:
-            note = "" if key else " · add ANTHROPIC_API_KEY to turn on Claude"
+            note = "" if writers else " · add GEMINI_API_KEY or ANTHROPIC_API_KEY to go online"
             st.markdown(f'<span class="badge-pill"><span class="live-dot" style="background:#F59E0B;'
                         f'box-shadow:0 0 8px #F59E0B;"></span>Offline · searches the Act, no internet needed{note}'
                         f'</span>', unsafe_allow_html=True)
@@ -999,23 +1035,33 @@ def legal_assistant() -> None:
                 status.update(label=f"Used {len(passages)} sections + your ledger", state="complete")
 
             answer, mode = None, "offline"
-            if use_claude and key:
+            if online and writer_name:
+                w = writers[writer_name]
                 try:
-                    answer = st.write_stream(stream_claude_answer(prompt, passages, facts, history, key))
-                    mode = "claude"
-                except anthropic.AuthenticationError:
+                    if w["kind"] == "gemini":
+                        stream = stream_gemini_answer(prompt, passages, facts, history, w["key"], w["model"])
+                    else:
+                        stream = stream_claude_answer(prompt, passages, facts, history, w["key"])
+                    answer = st.write_stream(stream)
+                    mode = "online"
+                except GeminiError as err:
+                    st.warning(gemini_problem(err), icon=":material/error:")
+                except requests.RequestException:
+                    st.warning("Could not reach Gemini (no internet?), so this is the offline answer.",
+                               icon=":material/wifi_off:")
+                except CLAUDE_AUTH_ERRORS:
                     st.warning("The Anthropic API key was rejected, so this is the offline answer.",
                                icon=":material/key_off:")
-                except anthropic.APIConnectionError:
+                except CLAUDE_NET_ERRORS:
                     st.warning("Could not reach Claude (no internet?), so this is the offline answer.",
                                icon=":material/wifi_off:")
-                except anthropic.APIStatusError as err:
+                except CLAUDE_API_ERRORS as err:
                     st.warning(f"Claude returned an error ({err.status_code}), so this is the offline answer.",
                                icon=":material/error:")
             if not isinstance(answer, str) or not answer.strip():
                 answer, mode = offline_answer(prompt, passages, facts), "offline"
                 st.markdown(answer)
-            m = {"role": "assistant", "content": answer, "mode": mode,
+            m = {"role": "assistant", "content": answer, "mode": mode, "writer": writer_name,
                  "sources": [p.pid for p in cited_passages(answer, passages)], "facts": facts.text}
             render_answer_footer(m)
     msgs.append(m)

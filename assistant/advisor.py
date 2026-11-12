@@ -5,17 +5,19 @@ For every question:
 1. Retrieve  - BM25 search over the Act's text and a few dated notes (assistant.retriever). Offline.
 2. Ground    - pull facts from the business's own ledger: unpaid invoices of any customer named in the
                question, the Section 16 interest on them (assistant.interest) and the cash forecast.
-3. Generate  - online with an Anthropic API key: Claude writes the answer from those passages and facts
-               only, citing sections, in the language of the question.
+3. Generate  - online with an API key: Claude (Anthropic) or Gemini (Google) writes the answer from those
+               passages and facts only, citing sections, in the language of the question.
                Offline or without a key: a template answer built from the same passages and facts.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Sequence
 
 import pandas as pd
+import requests
 
 from assistant.interest import InterestLine, interest_for_invoices
 from assistant.legal_corpus import (BANK_RATE, BANK_RATE_CHECKED, MAX_CREDIT_DAYS, MSMED_RATE, PASSAGE_BY_ID,
@@ -24,6 +26,8 @@ from assistant.retriever import LegalRetriever, concepts
 
 CLAUDE_MODEL = "claude-opus-5-5"
 CLAUDE_LABEL = "Claude Opus 5.5"
+GEMINI_DEFAULT_MODEL = "gemini-3.6-flash"    # marked "Stable" on Google's model list, Nov 2026
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
 SMALL_TURNOVER_LIMIT = 100e7            # ₹100 crore (limits from 1 April 2025)
 MICRO_TURNOVER_LIMIT = 10e7             # ₹10 crore
 
@@ -341,6 +345,53 @@ def stream_claude_answer(question: str, passages: Sequence[Passage], f: Facts, h
         yield " …"
 
 
+class GeminiError(Exception):
+    """HTTP error from the Gemini API (bad key, quota, unknown model, ...)."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(f"{status_code}: {message}")
+        self.status_code, self.message = status_code, message
+
+
+def gemini_label(model: str) -> str:
+    """'gemini-3.6-flash' -> 'Gemini 3.6 Flash'."""
+    return "Gemini " + " ".join(p if p[:1].isdigit() else p.capitalize() for p in model.split("-")[1:])
+
+
+def stream_gemini_answer(question: str, passages: Sequence[Passage], f: Facts, history: Sequence[dict],
+                         api_key: str, model: str = GEMINI_DEFAULT_MODEL) -> Iterator[str]:
+    """Same grounding and instructions as Claude, sent to Google's Gemini REST API.
+
+    Plain HTTPS through `requests` (already a Streamlit dependency), so no extra compiled packages.
+    Raises GeminiError on an HTTP error and requests.RequestException on a network failure.
+    """
+    contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+                for m in history[-6:]]
+    contents.append({"role": "user", "parts": [{"text": _user_block(question, passages, f)}]})
+    body = {"system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]}, "contents": contents}
+    resp = requests.post(GEMINI_URL.format(model=model), headers={"x-goog-api-key": api_key}, json=body,
+                         stream=True, timeout=(4, 60))
+    with resp:
+        if resp.status_code != 200:
+            try:
+                message = resp.json().get("error", {}).get("message", "")
+            except ValueError:
+                message = resp.text[:200]
+            raise GeminiError(resp.status_code, message)
+        resp.encoding = "utf-8"            # keeps Hindi / Telugu intact; SSE responses carry no charset
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data:"):
+                continue
+            chunk = json.loads(line[5:].strip())
+            if chunk.get("promptFeedback", {}).get("blockReason"):
+                yield "\n\n_Gemini declined to answer this question._"
+                return
+            for cand in chunk.get("candidates", []):
+                for part in cand.get("content", {}).get("parts", []):
+                    if part.get("text") and not part.get("thought"):
+                        yield part["text"]
+
+
 def answer_offline(question: str, ctx: BusinessContext) -> tuple:
     f = build_facts(question, ctx)
     passages = retrieve(question, f.customers)
@@ -359,5 +410,6 @@ def cited_passages(answer: str, passages: Sequence[Passage]) -> List[Passage]:
     return used or list(passages)
 
 
-__all__ = ["BusinessContext", "Facts", "CLAUDE_LABEL", "CLAUDE_MODEL", "answer_offline", "prepare",
-           "offline_answer", "stream_claude_answer", "cited_passages", "inr"]
+__all__ = ["BusinessContext", "Facts", "CLAUDE_LABEL", "CLAUDE_MODEL", "GEMINI_DEFAULT_MODEL", "GeminiError",
+           "answer_offline", "prepare", "offline_answer", "stream_claude_answer", "stream_gemini_answer",
+           "gemini_label", "cited_passages", "inr"]
