@@ -2,6 +2,13 @@
 
 **INNOVASIA 2K26 · Problem Statement PS-04 · Team Fin-Hack**
 
+### ▶ Live demo: **[runwayhi.streamlit.app](https://runwayhi.streamlit.app/)**
+
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://runwayhi.streamlit.app/)
+
+> The first visit after the app has been idle takes about 30 seconds while it runs 5,000 simulations.
+> Runs on a simulated auto-parts supplier; no real company data is used.
+
 Accounting tools tell a factory owner which invoices are *already* overdue. Runway tells them
 **how likely they are to run out of cash in the next 14, 30 and 60 days, which invoices are
 causing it, and what to do first** — ranked in rupees.
@@ -12,6 +19,29 @@ causing it, and what to do first** — ranked in rupees.
 | **Explain** | *Which invoices are driving the risk?* | Counterfactual attribution: re-run the simulation as if invoice *k* were paid on time |
 | **Act** | *What should I do first?* | Every candidate action ranked by `E[shortfall avoided] − cost of action` |
 | **Prove** | *Is it better than a spreadsheet?* | Rolling no-look-ahead backtest against 3 baselines, scored by Brier score and warning lead time |
+
+---
+
+## Screenshots
+
+**1 · Predict: when will cash run short?** Shortfall risk, the likely crunch window, and a 60-day
+forecast of the bank balance across 5,000 simulated futures, with the real bills behind each drop.
+
+![Predict tab: KPI cards and 60-day cash forecast fan chart](docs/screenshots/01-predict.png)
+
+**2 · Explain: which invoices cause it?** The five unpaid invoices whose late payment adds most to
+the risk, found by re-running the simulation as if each were paid on time.
+
+![Explain tab: top five risk-driving invoices](docs/screenshots/02-explain.png)
+
+**3 · Act: what should I do first?** Actions ranked by net rupee gain, plus a ready-to-send
+WhatsApp alert in English, Hindi or Telugu.
+
+![Act tab: ranked interventions and WhatsApp alert](docs/screenshots/03-act.png)
+
+**4 · Proof: does it work?** A 90-day backtest on data the model had not seen, against four simpler methods.
+
+![Proof tab: backtest results against baselines](docs/screenshots/04-proof.png)
 
 ---
 
@@ -171,7 +201,8 @@ amounts, and normalises segment / category names.
 ```
 runway/
 ├── demo.py                    CLI walkthrough of Predict → Explain → Act
-├── app/main.py                Streamlit dashboard (Predict / Explain / Act / Benchmark tabs)
+├── app/main.py                Streamlit dashboard (Predict / Explain / Act / Proof tabs)
+├── .streamlit/config.toml     Dark theme for the dashboard
 ├── data/
 │   ├── schemas.py             Shared dataclasses + segment / expense constants
 │   ├── generator.py           Synthetic MSME ledger + cash-history reconstruction
@@ -189,6 +220,7 @@ runway/
 │   ├── backtest.py            Rolling no-look-ahead backtest
 │   └── tuner.py               Penalizer grid search + calibration error
 ├── tests/                     Unit tests
+├── docs/screenshots/          Dashboard screenshots used in this README
 └── PLAYBOOK.md                Engineering plan and build prompts
 ```
 
