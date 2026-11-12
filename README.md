@@ -19,6 +19,7 @@ causing it, and what to do first** — ranked in rupees.
 | **Explain** | *Which invoices are driving the risk?* | Counterfactual attribution: re-run the simulation as if invoice *k* were paid on time |
 | **Act** | *What should I do first?* | Every candidate action ranked by `E[shortfall avoided] − cost of action` |
 | **Prove** | *Is it better than a spreadsheet?* | Rolling no-look-ahead backtest against 3 baselines, scored by Brier score and warning lead time |
+| **Ask** | *Can I legally charge this customer interest?* | RAG over the MSMED Act 2006 + the business's own invoices; Claude writes the answer online, a built-in answer works offline |
 
 ---
 
@@ -71,9 +72,16 @@ python demo.py                   # end-to-end CLI walkthrough (~35 s)
 streamlit run app/main.py        # dashboard
 ```
 
+**Optional: turn on Claude for the Ask tab.** Without a key the legal assistant runs fully offline.
+To let Claude write the answers, set `ANTHROPIC_API_KEY` as an environment variable, or put
+`ANTHROPIC_API_KEY = "sk-ant-..."` in `.streamlit/secrets.toml` (git-ignored). On Streamlit Cloud,
+add the same line under *App settings → Secrets*.
+
 > **pandas is pinned below 3.0.** On some Windows machines, Application Control blocks the pandas 3.x
 > DLLs; 2.x works everywhere we tested. The same policy can block new `pyarrow` builds (the dashboard
-> then fails on its tables): run `pip install pyarrow==18.1.0` to fix it locally. Streamlit Cloud is unaffected.
+> then fails on its tables): run `pip install pyarrow==18.1.0` to fix it locally. If it blocks
+> `pydantic_core` (needed by the `anthropic` SDK), run `pip install pydantic==2.10.6 jiter==0.8.2`.
+> Streamlit Cloud is unaffected.
 
 ### Every backend module runs its own self-test
 
@@ -86,6 +94,7 @@ streamlit run app/main.py        # dashboard
 | `python evaluation/backtest.py` | 90-point rolling backtest vs. 3 baselines + calibration curve | ~4 min |
 | `python evaluation/tuner.py` | Cross-validated penalizer grid search, writes `evaluation/tuning_report.json` | ~20 s |
 | `python -m unittest tests.test_security_and_edge_cases -v` | Input sanitizer + engine edge cases (6 tests) | <1 s |
+| `python -m unittest tests.test_assistant -v` | Legal assistant: interest maths, retrieval, offline answers (14 tests) | <1 s |
 
 Run them from the repository root.
 
@@ -194,6 +203,26 @@ For user-uploaded ledgers: neutralises spreadsheet formula injection (`=`, `+`, 
 GSTIN / PAN / bank account numbers, fixes inverted dates, drops duplicate invoice IDs and negative
 amounts, and normalises segment / category names.
 
+### 7. Legal assistant (RAG) — [`assistant/`](assistant/)
+The *Ask* tab answers questions such as *"Can I legally charge Vindhya interest?"* in three steps:
+
+1. **Retrieve.** BM25 keyword search ([`retriever.py`](assistant/retriever.py)) over the exact text of the
+   MSMED Act 2006, Sections 2, 8 and 15–24, plus a few dated notes: the RBI Bank Rate, Udyam registration,
+   the April 2025 MSME size limits, Income-tax Section 43B(h) and the MSME Samadhaan portal
+   ([`legal_corpus.py`](assistant/legal_corpus.py)). A small synonym table covers everyday and Hinglish
+   words ("byaj" → interest). Pure Python, no model download.
+2. **Ground.** Pull the business's own numbers: unpaid invoices of any customer named in the question and
+   the Section 16 interest on each ([`interest.py`](assistant/interest.py)). That interest is compound with
+   monthly rests at 3 × the RBI Bank Rate, starting the day after the agreed date, capped at 45 days
+   (Section 15). The 30-day forecast is added too.
+3. **Generate.** With an `ANTHROPIC_API_KEY`, Claude Opus 5.5 writes the answer from those passages and
+   numbers only, citing sections like `[Sec 16]`, in the language of the question. Without a key, or
+   when the network fails, a template answer is built from the same passages and numbers
+   ([`advisor.py`](assistant/advisor.py)).
+
+Every answer lists its sources, with the statute text and the ledger numbers it used. The cash forecast
+itself never uses an LLM.
+
 ---
 
 ## Repository layout
@@ -201,7 +230,12 @@ amounts, and normalises segment / category names.
 ```
 runway/
 ├── demo.py                    CLI walkthrough of Predict → Explain → Act
-├── app/main.py                Streamlit dashboard (Predict / Explain / Act / Proof tabs)
+├── app/main.py                Streamlit dashboard (Predict / Explain / Act / Proof / Ask tabs)
+├── assistant/
+│   ├── legal_corpus.py        MSMED Act 2006 text (Secs 2, 8, 15–24) + dated notes
+│   ├── retriever.py           BM25 search with everyday / Hinglish synonyms
+│   ├── interest.py            Section 16 interest per unpaid invoice
+│   └── advisor.py             Grounding facts, offline answers, Claude streaming
 ├── .streamlit/config.toml     Dark theme for the dashboard
 ├── data/
 │   ├── schemas.py             Shared dataclasses + segment / expense constants
@@ -231,3 +265,6 @@ runway/
   **assumptions**, not estimates from data.
 - The dashboard runs on the synthetic company; there is no CSV upload flow yet, so the sanitizer is
   not yet wired into the app.
+- The legal assistant gives general information from the Act's text, not legal advice. Its interest
+  figures assume acceptance on the invoice date and use today's bank rate for the whole period.
+  Written objections by the buyer (which delay the clock) are not in the data.

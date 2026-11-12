@@ -7,6 +7,7 @@ Every number on this page is computed by the engine at load time; nothing is typ
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from urllib.parse import quote
@@ -20,10 +21,19 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
+from assistant import (CLAUDE_LABEL, BusinessContext, cited_passages, offline_answer, prepare,
+                       stream_claude_answer)
+from assistant.legal_corpus import BANK_RATE, BANK_RATE_CHECKED, MSMED_RATE, PASSAGE_BY_ID
 from data.generator import generate_msme_ledger, reconstruct_cash_history
 from data.schemas import EXPENSE_EMI_RENT, EXPENSE_GST_TAX, EXPENSE_PAYROLL, EXPENSE_RAW_MATERIAL
 from engine import run_runway_pipeline
+
+try:  # optional: without the SDK the legal assistant runs in offline mode only
+    import anthropic
+except ImportError:
+    anthropic = None
 
 SEED = 42
 N_SIMULATIONS = 5000
@@ -405,7 +415,8 @@ with st.expander("New here? How to read this dashboard", icon=":material/help:")
 - **Shortfall risk** = in what share of those futures the bank balance drops below ₹0.
   89% means 89 out of 100 simulated futures run out of cash at some point.
 - **Tabs:** *Predict* shows when the crunch is likely, *Explain* shows which unpaid invoices cause it,
-  *Act* ranks what to do (rupees saved minus rupees spent), *Proof* shows how well this worked on past data.
+  *Act* ranks what to do (rupees saved minus rupees spent), *Proof* shows how well this worked on past data,
+  *Ask* answers questions about the late-payment law (MSMED Act 2006) using your own invoices.
 - **Data:** this is a simulated auto-parts supplier with 25 customers and 500 invoices over one year.
   No real company data is used.
         """
@@ -466,11 +477,12 @@ with k4:
 # --------------------------------------------------------------------------- #
 # Tabs
 # --------------------------------------------------------------------------- #
-tab_predict, tab_explain, tab_act, tab_eval = st.tabs([
+tab_predict, tab_explain, tab_act, tab_eval, tab_ask = st.tabs([
     "1 · Predict: when will cash run short?",
     "2 · Explain: which invoices cause it?",
     "3 · Act: what should I do first?",
     "4 · Proof: does it work?",
+    "5 · Ask: what does the law say?",
 ])
 
 # --------------------------------------------------------------------------- #
@@ -862,4 +874,165 @@ with tab_eval:
         "Honest limits: tested on 90 days of one simulated company containing 3 cash crunches. Always guessing the "
         "average rate (39%) scores almost as well on prediction error (0.238), but it never raises an alarm; the "
         "early warning is where Runway clearly adds value."
+    )
+
+# --------------------------------------------------------------------------- #
+# TAB 5: ASK (legal assistant: retrieval over the MSMED Act + the ledger, answer by Claude or offline)
+# --------------------------------------------------------------------------- #
+LEGAL_SUGGESTIONS = {
+    ":material/currency_rupee: Can I legally charge Vindhya interest?": "Can I legally charge Vindhya interest?",
+    ":material/gavel: How do I file a complaint if a buyer doesn't pay?":
+        "How do I file a complaint if a buyer doesn't pay?",
+    ":material/receipt_long: Does my buyer lose a tax benefit if they pay me late?":
+        "Does my buyer lose a tax benefit if they pay me late?",
+    ":material/verified_user: Am I covered by the MSMED Act?": "Am I covered by the MSMED Act?",
+}
+ASSISTANT_AVATAR = ":material/balance:"
+
+legal_ctx = BusinessContext(
+    company=COMPANY_NAME, owner=OWNER_NAME, as_of=as_of, turnover=float(turnover), invoices=invoices,
+    p_short_30d=sim.p_deficit_30d, crunch_window=window_text, risk_drivers=list(sim.top_risk_invoices),
+)
+
+
+def anthropic_api_key() -> str | None:
+    """Key from Streamlit secrets (cloud) or the environment (local). None means offline mode."""
+    if anthropic is None:
+        return None
+    try:
+        key = st.secrets.get("ANTHROPIC_API_KEY")
+    except StreamlitSecretNotFoundError:
+        key = None
+    return key or os.environ.get("ANTHROPIC_API_KEY") or None
+
+
+def render_sources(pids: list, facts_text: str) -> None:
+    passages = [PASSAGE_BY_ID[p] for p in pids if p in PASSAGE_BY_ID]
+    label = "Sources: " + " · ".join(p.cite for p in passages) if passages else "Sources"
+    with st.expander(label, icon=":material/menu_book:"):
+        for p in passages:
+            kind = "Exact text of the MSMED Act 2006" if p.kind == "law" else "Runway note, not the Act's text"
+            st.markdown(f"**{p.cite} · {p.title}**  \n:gray[{kind} · [source]({p.source})]")
+            st.markdown("> " + p.text.replace("\n", "\n> "))
+        if facts_text:
+            st.markdown("**Numbers used from your ledger and forecast**")
+            st.code(facts_text, language=None, wrap_lines=True)
+
+
+def render_answer_footer(m: dict) -> None:
+    how = (f"Written by {CLAUDE_LABEL} from the sections below" if m["mode"] == "claude"
+           else "Offline answer built from the sections below (no internet used)")
+    st.caption(how)
+    render_sources(m["sources"], m["facts"])
+
+
+@st.fragment
+def legal_assistant() -> None:
+    key = anthropic_api_key()
+    msgs = st.session_state.setdefault("legal_chat", [])
+
+    top_l, top_m, top_r = st.columns([5, 4, 1.4], vertical_alignment="center")
+    with top_m:
+        use_claude = st.toggle(
+            f"Online: {CLAUDE_LABEL} writes the answer", value=bool(key), disabled=not key, key="legal_online",
+            help="Off = offline mode. The same law sections and numbers are used, and the answer is built "
+                 "without any internet. Turn off if the venue Wi-Fi is unreliable.",
+        )
+    with top_l:
+        if use_claude:
+            st.markdown(f'<span class="badge-pill"><span class="live-dot"></span>Online · searches the Act, then '
+                        f'{CLAUDE_LABEL} writes the answer</span>', unsafe_allow_html=True)
+        else:
+            note = "" if key else " · add ANTHROPIC_API_KEY to turn on Claude"
+            st.markdown(f'<span class="badge-pill"><span class="live-dot" style="background:#F59E0B;'
+                        f'box-shadow:0 0 8px #F59E0B;"></span>Offline · searches the Act, no internet needed{note}'
+                        f'</span>', unsafe_allow_html=True)
+    with top_r:
+        if st.button("New chat", icon=":material/refresh:", disabled=not msgs, width="stretch"):
+            msgs.clear()
+            st.session_state.pop("legal_pick", None)
+            st.rerun(scope="fragment")
+
+    chat_box = st.container(height=560)
+    with chat_box:
+        with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+            st.markdown(
+                f"Namaste {OWNER_NAME}. Ask me what the law says when a customer pays late: interest, the "
+                f"45-day limit, filing a complaint, or the buyer's tax position. I'll check the MSMED Act "
+                f"and your own invoices, and show you the exact sections I used. You can ask in Hindi, "
+                f"Telugu or English."
+            )
+        for m in msgs:
+            with st.chat_message(m["role"], avatar=ASSISTANT_AVATAR if m["role"] == "assistant" else None):
+                st.markdown(m["content"])
+                if m["role"] == "assistant":
+                    render_answer_footer(m)
+
+    prompt = None
+    if not msgs:
+        suggestions = st.empty()
+        picked = suggestions.pills("Try asking", list(LEGAL_SUGGESTIONS), label_visibility="collapsed",
+                                   key="legal_pick")
+        if picked:
+            prompt = LEGAL_SUGGESTIONS[picked]
+    typed = st.chat_input("Ask about a late payment, interest, a complaint… (English, हिंदी, తెలుగు)",
+                          key="legal_q", submit_mode="disable")
+    prompt = typed or prompt
+    if not prompt:
+        return
+    if not msgs:
+        suggestions.empty()
+
+    history = [{"role": m["role"], "content": m["content"]} for m in msgs]
+    msgs.append({"role": "user", "content": prompt})
+    with chat_box:
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+            passages, facts = prepare(prompt, legal_ctx)
+            with st.status(":shimmer[Searching the MSMED Act]", type="compact") as status:
+                with st.status("Searched the Act and Runway's notes", type="step", state="complete"):
+                    st.write(" · ".join(p.cite for p in passages) or "No matching section")
+                with st.status("Added your numbers", type="step", state="complete"):
+                    who = ", ".join(facts.customers) or "your whole ledger"
+                    st.write(f"Unpaid invoices and interest for {who}, plus the 30-day forecast")
+                status.update(label=f"Used {len(passages)} sections + your ledger", state="complete")
+
+            answer, mode = None, "offline"
+            if use_claude and key:
+                try:
+                    answer = st.write_stream(stream_claude_answer(prompt, passages, facts, history, key))
+                    mode = "claude"
+                except anthropic.AuthenticationError:
+                    st.warning("The Anthropic API key was rejected, so this is the offline answer.",
+                               icon=":material/key_off:")
+                except anthropic.APIConnectionError:
+                    st.warning("Could not reach Claude (no internet?), so this is the offline answer.",
+                               icon=":material/wifi_off:")
+                except anthropic.APIStatusError as err:
+                    st.warning(f"Claude returned an error ({err.status_code}), so this is the offline answer.",
+                               icon=":material/error:")
+            if not isinstance(answer, str) or not answer.strip():
+                answer, mode = offline_answer(prompt, passages, facts), "offline"
+                st.markdown(answer)
+            m = {"role": "assistant", "content": answer, "mode": mode,
+                 "sources": [p.pid for p in cited_passages(answer, passages)], "facts": facts.text}
+            render_answer_footer(m)
+    msgs.append(m)
+
+
+with tab_ask:
+    st.markdown('<div class="section-title">Ask what the law says about late payments</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-plain">Runway first <b>searches</b> the MSMED Act 2006 for the sections that matter, '
+        '<b>adds your own numbers</b> (unpaid invoices, interest owed, the cash forecast), then <b>writes the '
+        'answer</b> with section references you can check. This is retrieval-augmented generation (RAG): the answer '
+        'can only use what was retrieved.</div>',
+        unsafe_allow_html=True,
+    )
+    legal_assistant()
+    st.caption(
+        f"General information from the text of the Act, not legal advice. Interest is an estimate: "
+        f"{MSMED_RATE:.2%} a year compounded monthly (3 × RBI Bank Rate {BANK_RATE:.2%}, checked "
+        f"{BANK_RATE_CHECKED}), counted from the invoice date plus the agreed terms, capped at 45 days."
     )
