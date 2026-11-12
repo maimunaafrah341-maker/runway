@@ -21,11 +21,11 @@ import streamlit as st
 from engine import run_runway_pipeline
 
 # --------------------------------------------------------------------------- #
-# Page Configuration & Dark Fintech Styling
+# Page Configuration & Clean Dark Fintech Styling (No Emojis, Pure SVG/CSS)
 # --------------------------------------------------------------------------- #
 st.set_page_config(
     page_title="Runway · Cash-Shortfall Early Warning",
-    page_icon="📊",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -36,7 +36,7 @@ st.markdown(
     <style>
     /* Background & Global Fonts */
     .stApp {
-        background-color: #0B0F17;
+        background-color: #070B11;
         color: #F8FAFC;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
@@ -46,30 +46,33 @@ st.markdown(
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 12px 0 20px 0;
+        padding: 10px 0 18px 0;
         border-bottom: 1px solid #1E293B;
-        margin-bottom: 24px;
+        margin-bottom: 22px;
     }
-    .brand-title {
-        font-size: 26px;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-        color: #FFFFFF;
+    .brand-container {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
+    }
+    .brand-title {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        color: #FFFFFF;
+        line-height: 1.1;
     }
     .brand-sub {
-        font-size: 10px;
-        letter-spacing: 2.5px;
+        font-size: 9px;
+        letter-spacing: 2.2px;
         text-transform: uppercase;
-        color: #06B6D4;
+        color: #00E5FF;
         font-weight: 700;
-        margin-top: 2px;
+        margin-top: 3px;
     }
     .badge-pill {
-        background-color: #131B2A;
-        border: 1px solid #1E293B;
+        background-color: #111827;
+        border: 1px solid #1F2937;
         border-radius: 9999px;
         padding: 6px 14px;
         font-size: 13px;
@@ -79,8 +82,8 @@ st.markdown(
         gap: 8px;
     }
     .live-dot {
-        width: 8px;
-        height: 8px;
+        width: 7px;
+        height: 7px;
         background-color: #10B981;
         border-radius: 50%;
         display: inline-block;
@@ -92,7 +95,7 @@ st.markdown(
         font-size: 11px;
         letter-spacing: 2px;
         text-transform: uppercase;
-        color: #06B6D4;
+        color: #00E5FF;
         font-weight: 700;
         margin-bottom: 4px;
     }
@@ -106,21 +109,21 @@ st.markdown(
     .greeting-sub {
         font-size: 15px;
         color: #94A3B8;
-        margin-bottom: 24px;
+        margin-bottom: 22px;
     }
     
     /* 4 Top KPI Cards */
     .kpi-card {
-        background-color: #131B2A;
-        border: 1px solid #1E293B;
+        background-color: #111827;
+        border: 1px solid #1F2937;
         border-radius: 12px;
         padding: 20px 22px;
         position: relative;
-        min-height: 140px;
+        min-height: 136px;
     }
     .kpi-label {
         font-size: 11px;
-        letter-spacing: 1.5px;
+        letter-spacing: 1.4px;
         text-transform: uppercase;
         color: #94A3B8;
         font-weight: 600;
@@ -144,7 +147,7 @@ st.markdown(
     .delta-red { color: #EF4444; }
     
     .badge-danger {
-        background: rgba(239, 68, 68, 0.15);
+        background: rgba(239, 68, 68, 0.16);
         color: #EF4444;
         font-size: 11px;
         font-weight: 700;
@@ -154,7 +157,7 @@ st.markdown(
         display: inline-block;
     }
     .badge-subtle {
-        background: #1E293B;
+        background: #1F2937;
         color: #94A3B8;
         font-size: 11px;
         padding: 3px 8px;
@@ -164,29 +167,30 @@ st.markdown(
     
     /* Tabs Styling */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-        border-bottom: 1px solid #1E293B;
+        gap: 28px;
+        border-bottom: 1px solid #1F2937;
         padding-bottom: 4px;
-        margin-top: 20px;
-        margin-bottom: 24px;
+        margin-top: 18px;
+        margin-bottom: 22px;
     }
     .stTabs [data-baseweb="tab"] {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 600;
         color: #64748B;
         background-color: transparent !important;
         border: none !important;
         padding: 10px 4px;
+        letter-spacing: 0.3px;
     }
     .stTabs [aria-selected="true"] {
-        color: #06B6D4 !important;
-        border-bottom: 2px solid #06B6D4 !important;
+        color: #00E5FF !important;
+        border-bottom: 2px solid #00E5FF !important;
     }
     
-    /* Summary Bottom Pills */
+    /* Summary Bottom Cards */
     .summary-card {
-        background-color: #131B2A;
-        border: 1px solid #1E293B;
+        background-color: #111827;
+        border: 1px solid #1F2937;
         border-radius: 10px;
         padding: 16px 20px;
         text-align: left;
@@ -211,15 +215,14 @@ st.markdown(
     
     /* Action Cards */
     .action-card {
-        background-color: #131B2A;
-        border: 1px solid #1E293B;
+        background-color: #111827;
+        border: 1px solid #1F2937;
         border-radius: 12px;
         padding: 20px 24px;
         margin-bottom: 16px;
-        transition: transform 0.15s ease;
     }
     .action-card:hover {
-        border-color: #06B6D4;
+        border-color: #00E5FF;
     }
     .action-title {
         font-size: 17px;
@@ -231,6 +234,26 @@ st.markdown(
         font-size: 14px;
         color: #94A3B8;
         margin-bottom: 14px;
+    }
+    
+    /* Help Bubble in Corner */
+    .help-bubble {
+        position: fixed;
+        bottom: 20px;
+        right: 24px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background-color: #FFFFFF;
+        color: #000000;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        font-size: 15px;
+        cursor: pointer;
+        z-index: 999;
     }
     
     /* Hide Streamlit default chrome */
@@ -258,23 +281,36 @@ def load_data():
 sim_result, actions, simulator = load_data()
 
 # --------------------------------------------------------------------------- #
-# Top Navigation Header
+# Top Navigation Header (Pure SVG, No Emojis)
 # --------------------------------------------------------------------------- #
 st.markdown(
     """
     <div class="top-header">
-        <div>
-            <div class="brand-title">
-                <span style="color: #06B6D4;">📊</span> Runway
+        <div class="brand-container">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="13" width="4" height="8" rx="1.5" fill="#00E5FF"/>
+                <rect x="10" y="8" width="4" height="13" rx="1.5" fill="#00E5FF"/>
+                <rect x="17" y="3" width="4" height="18" rx="1.5" fill="#00E5FF"/>
+            </svg>
+            <div>
+                <div class="brand-title">Runway</div>
+                <div class="brand-sub">PREDICT. EXPLAIN. ACT.</div>
             </div>
-            <div class="brand-sub">PREDICT. EXPLAIN. ACT.</div>
         </div>
         <div style="display: flex; gap: 12px; align-items: center;">
             <div class="badge-pill">
-                🏭 Sri Lakshmi Auto Components Pvt Ltd <span style="color: #64748B;">• ₹12.6 Cr turnover</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
+                    <path d="M6 12H4a2 2 0 0 0-2 2v8h4"/>
+                    <path d="M18 9h2a2 2 0 0 1 2 2v11h-4"/>
+                </svg>
+                <span>Sri Lakshmi Auto Components Pvt Ltd</span>
+                <span style="color: #64748B;">• ₹12.6 Cr annual turnover</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
             <div class="badge-pill">
-                <span class="live-dot"></span> Live · 5,000-Path Simulation
+                <span class="live-dot"></span>
+                <span style="color: #F8FAFC; font-weight: 500;">Live · 5,000-Path Simulation</span>
             </div>
         </div>
     </div>
@@ -283,32 +319,36 @@ st.markdown(
 )
 
 # --------------------------------------------------------------------------- #
-# Executive Greeting & Timestamp
+# Executive Greeting & Timestamp (Pure SVG Icon)
 # --------------------------------------------------------------------------- #
 col_greet, col_time = st.columns([3, 1])
 with col_greet:
     st.markdown('<div class="eyebrow">CASH INTELLIGENCE / LIVE OUTLOOK</div>', unsafe_allow_html=True)
     st.markdown('<div class="greeting-title">Good morning, Raghav.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="greeting-sub">Your cash position needs immediate attention this week.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="greeting-sub">Your cash position needs attention this week.</div>', unsafe_allow_html=True)
 with col_time:
     st.markdown(
         """
-        <div style="text-align: right; color: #64748B; font-size: 13px; padding-top: 18px;">
-            🕒 As of Jan 01, 2026 · 09:42 IST
+        <div style="text-align: right; color: #64748B; font-size: 13px; padding-top: 20px; display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>As of Jan 01, 2026 · 09:42 IST</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 # --------------------------------------------------------------------------- #
-# 4 Top KPI Metric Ribbon
+# 4 Top KPI Metric Ribbon (Exact Figma Match, Pure SVG)
 # --------------------------------------------------------------------------- #
 k1, k2, k3, k4 = st.columns(4)
 
 with k1:
     st.markdown(
         """
-        <div class="kpi-card" style="border-bottom: 2px solid #06B6D4;">
+        <div class="kpi-card" style="border-bottom: 2px solid #00E5FF;">
             <div class="kpi-label">Cash Balance Today</div>
             <div class="kpi-value">₹9.22 Lakhs</div>
             <div class="kpi-delta delta-green">↑ ₹1.14L vs. 7 days ago</div>
@@ -321,7 +361,14 @@ with k2:
     st.markdown(
         f"""
         <div class="kpi-card">
-            <div class="kpi-label">14-Day Shortfall Risk <span style="color: #EF4444;">⚠️</span></div>
+            <div class="kpi-label">
+                <span>14-Day Shortfall Risk</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </div>
             <div class="kpi-value">{sim_result.p_deficit_14d:.1%}</div>
             <div>
                 <span class="badge-danger">HIGH RISK</span>
@@ -336,7 +383,14 @@ with k3:
     st.markdown(
         f"""
         <div class="kpi-card">
-            <div class="kpi-label">30-Day Shortfall Risk <span style="color: #EF4444;">⚠️</span></div>
+            <div class="kpi-label">
+                <span>30-Day Shortfall Risk</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </div>
             <div class="kpi-value">{sim_result.p_deficit_30d:.1%}</div>
             <div>
                 <span class="badge-danger">CRITICAL ALERT</span>
@@ -351,7 +405,15 @@ with k4:
     st.markdown(
         """
         <div class="kpi-card">
-            <div class="kpi-label">Deficit Danger Window <span style="color: #F59E0B;">📅</span></div>
+            <div class="kpi-label">
+                <span>Deficit Danger Window</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                    <line x1="16" x2="16" y1="2" y2="6"/>
+                    <line x1="8" x2="8" y1="2" y2="6"/>
+                    <line x1="3" x2="21" y1="10" y2="10"/>
+                </svg>
+            </div>
             <div class="kpi-value" style="font-size: 30px;">Jan 07 – Jan 10</div>
             <div style="font-size: 12px; color: #94A3B8;">
                 <span style="color: #F59E0B; font-weight: 600;">Trigger:</span> Payroll + Vendor Dues
@@ -380,13 +442,13 @@ with tab_predict:
         <div style="display: flex; justify-content: space-between; align-items: center; margin: 16px 0 12px 0;">
             <div>
                 <span style="font-size: 20px; font-weight: 700; color: #FFFFFF;">60-Day Cash Flow Horizon</span>
-                <span style="background: rgba(6, 182, 212, 0.15); color: #06B6D4; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; margin-left: 8px;">AI FORECAST</span>
+                <span style="background: rgba(0, 229, 255, 0.12); color: #00E5FF; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; margin-left: 8px; border: 1px solid rgba(0, 229, 255, 0.3);">AI FORECAST</span>
                 <div style="font-size: 13px; color: #64748B; margin-top: 2px;">Monte Carlo forecast · 5,000 paths · Updated 2 minutes ago</div>
             </div>
-            <div style="display: flex; gap: 16px; font-size: 12px; color: #94A3B8;">
-                <span><span style="color: #00E5FF; font-weight: bold;">—</span> Median (P50)</span>
-                <span><span style="background: rgba(6, 182, 212, 0.3); padding: 2px 6px; border-radius: 2px;">■</span> Confidence (P10–P90)</span>
-                <span><span style="color: #EF4444;">┄┄</span> Deficit line</span>
+            <div style="display: flex; gap: 20px; font-size: 12px; color: #94A3B8;">
+                <span><span style="color: #00E5FF; font-weight: bold; margin-right: 4px;">—</span> Median (P50)</span>
+                <span><span style="background: rgba(0, 229, 255, 0.25); padding: 2px 6px; border-radius: 2px; margin-right: 4px;">■</span> Confidence (P10–P90)</span>
+                <span><span style="color: #EF4444; margin-right: 4px;">┄┄</span> Deficit line</span>
             </div>
         </div>
         """,
@@ -406,7 +468,7 @@ with tab_predict:
         x=dates,
         y=p90_L,
         mode="lines",
-        line=dict(width=1, color="rgba(6, 182, 212, 0.3)", dash="dash"),
+        line=dict(width=1, color="rgba(0, 229, 255, 0.25)", dash="dash"),
         name="P90",
         showlegend=False,
         hoverinfo="skip",
@@ -415,9 +477,9 @@ with tab_predict:
         x=dates,
         y=p10_L,
         mode="lines",
-        line=dict(width=1, color="rgba(6, 182, 212, 0.3)", dash="dash"),
+        line=dict(width=1, color="rgba(0, 229, 255, 0.25)", dash="dash"),
         fill="tonexty",
-        fillcolor="rgba(6, 182, 212, 0.12)",
+        fillcolor="rgba(0, 229, 255, 0.08)",
         name="P10-P90 Confidence",
         showlegend=False,
     ))
@@ -465,11 +527,11 @@ with tab_predict:
         arrowhead=2,
         arrowsize=1,
         arrowwidth=1.5,
-        arrowcolor="#06B6D4",
+        arrowcolor="#00E5FF",
         ax=-40,
         ay=-50,
-        bgcolor="#162032",
-        bordercolor="#06B6D4",
+        bgcolor="#111827",
+        bordercolor="#00E5FF",
         borderwidth=1,
         borderpad=6,
         font=dict(size=11, color="#FFFFFF"),
@@ -486,7 +548,7 @@ with tab_predict:
         arrowcolor="#F59E0B",
         ax=40,
         ay=-45,
-        bgcolor="#162032",
+        bgcolor="#111827",
         bordercolor="#F59E0B",
         borderwidth=1,
         borderpad=6,
@@ -503,21 +565,21 @@ with tab_predict:
         arrowcolor="#64748B",
         ax=0,
         ay=-35,
-        bgcolor="#162032",
-        bordercolor="#334155",
+        bgcolor="#111827",
+        bordercolor="#374151",
         borderwidth=1,
         borderpad=5,
         font=dict(size=10, color="#94A3B8"),
     )
 
     fig.update_layout(
-        paper_bgcolor="#131B2A",
-        plot_bgcolor="#131B2A",
+        paper_bgcolor="#111827",
+        plot_bgcolor="#111827",
         margin=dict(l=50, r=30, t=20, b=40),
         height=420,
         xaxis=dict(
             showgrid=True,
-            gridcolor="#1E293B",
+            gridcolor="#1F2937",
             color="#94A3B8",
             tickformat="%b %d",
             tickmode="linear",
@@ -525,7 +587,7 @@ with tab_predict:
         ),
         yaxis=dict(
             showgrid=True,
-            gridcolor="#1E293B",
+            gridcolor="#1F2937",
             color="#94A3B8",
             ticksuffix="L",
             title=dict(text="Cash Balance (₹ Lakhs)", font=dict(color="#64748B", size=12)),
@@ -535,7 +597,7 @@ with tab_predict:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Bottom 3 Summary Metric Cards
+    # Bottom 3 Summary Metric Cards (Exact Match to Image 2)
     s1, s2, s3 = st.columns(3)
     with s1:
         st.markdown(
@@ -554,7 +616,7 @@ with tab_predict:
             <div class="summary-card">
                 <div class="summary-label">Recovery Expected</div>
                 <div class="summary-value" style="color: #10B981;">January 11</div>
-                <div class="summary-sub">After Brahmaputra payment release</div>
+                <div class="summary-sub">After Brahmaputra receipt</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -565,7 +627,7 @@ with tab_predict:
             <div class="summary-card">
                 <div class="summary-label">Forecast Confidence</div>
                 <div class="summary-value" style="color: #FFFFFF;">High · 91%</div>
-                <div class="summary-sub">Based on 24-month survival calibration</div>
+                <div class="summary-sub">Based on 24-month history</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -586,15 +648,15 @@ with tab_explain:
                 x=top_df["marginal_risk_reduction"] * 100,
                 y=top_df["customer"] + " (" + top_df["invoice_id"] + ")",
                 orientation="h",
-                marker=dict(color="#06B6D4", line=dict(color="#00E5FF", width=1)),
+                marker=dict(color="#00E5FF", line=dict(color="#00E5FF", width=1)),
                 hovertemplate="<b>%{y}</b><br>Risk Reduction: %{x:.1f}%<extra></extra>",
             ))
             bar_fig.update_layout(
-                paper_bgcolor="#131B2A",
-                plot_bgcolor="#131B2A",
+                paper_bgcolor="#111827",
+                plot_bgcolor="#111827",
                 margin=dict(l=10, r=20, t=10, b=40),
                 height=340,
-                xaxis=dict(title="Marginal Deficit Risk Reduction (%)", color="#94A3B8", gridcolor="#1E293B"),
+                xaxis=dict(title="Marginal Deficit Risk Reduction (%)", color="#94A3B8", gridcolor="#1F2937"),
                 yaxis=dict(color="#F8FAFC", autorange="reversed"),
             )
             st.plotly_chart(bar_fig, use_container_width=True)
@@ -602,9 +664,14 @@ with tab_explain:
     with col_callout:
         st.markdown(
             """
-            <div style="background-color: #131B2A; border: 1px solid #1E293B; border-radius: 12px; padding: 22px; height: 340px;">
-                <div style="color: #F59E0B; font-weight: 700; font-size: 15px; margin-bottom: 8px;">
-                    ⚠️ Buyer Concentration Alert
+            <div style="background-color: #111827; border: 1px solid #1F2937; border-radius: 12px; padding: 22px; height: 340px;">
+                <div style="display: flex; align-items: center; gap: 8px; color: #F59E0B; font-weight: 700; font-size: 15px; margin-bottom: 10px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span>Buyer Concentration Warning</span>
                 </div>
                 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6; margin-bottom: 14px;">
                     <b>Brahmaputra Mobility Ltd</b> accounts for <b>3 of the top 5</b> delayed receivables, representing <b>₹17.50 Lakhs</b> of locked capital.
@@ -612,8 +679,8 @@ with tab_explain:
                 <div style="font-size: 13px; color: #94A3B8; line-height: 1.5; margin-bottom: 16px;">
                     Our Gaussian Copula correlation model (ρ = 0.5) detects that their bureaucratic payment cycle moves all their invoices together, directly triggering your Jan 07–10 shortfall.
                 </div>
-                <div style="background: rgba(6, 182, 212, 0.1); border-left: 3px solid #06B6D4; padding: 10px 12px; font-size: 12px; color: #E2E8F0;">
-                    💡 Recommended strategy: Offer 2% early cash settlement discount to unlock this cluster before Jan 07.
+                <div style="background: rgba(0, 229, 255, 0.08); border-left: 3px solid #00E5FF; padding: 10px 12px; font-size: 12px; color: #E2E8F0;">
+                    Recommended Strategy: Offer 2% early cash settlement discount to unlock this cluster before Jan 07.
                 </div>
             </div>
             """,
@@ -636,7 +703,7 @@ with tab_act:
                 <div class="action-card">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
-                            <span class="badge-subtle" style="color: #06B6D4; font-weight: 700; margin-bottom: 6px;">#{idx+1} RECOMMENDED ACTION</span>
+                            <span class="badge-subtle" style="color: #00E5FF; font-weight: 700; margin-bottom: 6px;">#{idx+1} RECOMMENDED ACTION</span>
                             <div class="action-title">{act.action_type.replace('_', ' ')} · {act.invoice_id}</div>
                             <div class="action-desc">{act.description}</div>
                         </div>
@@ -645,10 +712,10 @@ with tab_act:
                             <div style="font-size: 22px; font-weight: 700; color: #10B981;">+₹{act.net_benefit/100000:.2f}L</div>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 24px; font-size: 13px; color: #94A3B8; border-top: 1px solid #1E293B; padding-top: 10px; margin-top: 6px;">
-                        <span>🛡️ Avoids <b>₹{act.expected_shortfall_avoided/100000:.2f}L</b> deficit risk</span>
-                        <span>🏷️ Cost: <b>₹{act.cost_of_action:,.0f}</b></span>
-                        <span>📈 ROI: <b>{(act.expected_shortfall_avoided / max(1.0, act.cost_of_action)):.0f}x</b></span>
+                    <div style="display: flex; gap: 24px; font-size: 13px; color: #94A3B8; border-top: 1px solid #1F2937; padding-top: 10px; margin-top: 6px;">
+                        <span>Avoids <b>₹{act.expected_shortfall_avoided/100000:.2f}L</b> deficit risk</span>
+                        <span>Cost: <b>₹{act.cost_of_action:,.0f}</b></span>
+                        <span>ROI: <b>{(act.expected_shortfall_avoided / max(1.0, act.cost_of_action)):.0f}x</b></span>
                     </div>
                 </div>
                 """,
@@ -658,9 +725,9 @@ with tab_act:
     with act_col2:
         st.markdown(
             """
-            <div style="background-color: #131B2A; border: 1px solid #1E293B; border-radius: 12px; padding: 22px; margin-bottom: 16px;">
+            <div style="background-color: #111827; border: 1px solid #1F2937; border-radius: 12px; padding: 22px; margin-bottom: 16px;">
                 <div style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
-                    📲 Dispatch WhatsApp Alert
+                    Dispatch WhatsApp Advisory
                 </div>
                 <div style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">
                     Send one-click localized advisory to factory proprietor Raghav.
@@ -680,7 +747,7 @@ with tab_act:
             msg = f"హెచ్చరిక: జనవరి 7-10 మధ్య ₹2.64 లక్షల నగదు కొరత ఏర్పడే ప్రమాదం 89% ఉంది. సిఫార్సు: ఇన్వాయిస్ INV-2025-0357 పై 2% త్వరిత తగ్గింపు ఇవ్వండి. నికర ప్రయోజనం: +₹3.63 లక్షలు."
 
         st.text_area("Message Preview", msg, height=110)
-        if st.button("📋 Copy Alert to Clipboard", use_container_width=True):
+        if st.button("Copy Alert to Clipboard", use_container_width=True):
             st.success("Alert copied to clipboard!")
 
 # --------------------------------------------------------------------------- #
@@ -706,9 +773,12 @@ with tab_eval:
 
     st.markdown(
         """
-        <div style="background-color: #131B2A; border-left: 3px solid #10B981; padding: 14px 18px; border-radius: 6px; font-size: 13px; color: #CBD5E1; margin-top: 14px;">
+        <div style="background-color: #111827; border-left: 3px solid #10B981; padding: 14px 18px; border-radius: 6px; font-size: 13px; color: #CBD5E1; margin-top: 14px;">
             <b>Quantitative Proof:</b> Runway achieves a <b>0.234 Brier score</b> (outperforming ARIMA at 0.283 and Naive at 0.389) while providing <b>22 days of actionable warning lead time</b> with <b>30% fewer false alarms</b> than time-series baselines.
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+# Floating help bubble
+st.markdown('<div class="help-bubble">?</div>', unsafe_allow_html=True)
