@@ -11,8 +11,8 @@ For every question:
 """
 from __future__ import annotations
 
-import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Sequence
 
@@ -27,7 +27,8 @@ from assistant.retriever import LegalRetriever, concepts
 CLAUDE_MODEL = "claude-opus-5-5"
 CLAUDE_LABEL = "Claude Opus 5.5"
 GEMINI_DEFAULT_MODEL = "gemini-3.6-flash"    # marked "Stable" on Google's model list, Nov 2026
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
+GEMINI_LITE_MODEL = "gemini-3.5-flash-lite"   # larger free-tier quota; used as the backup for the default
+GEMINI_GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 SMALL_TURNOVER_LIMIT = 100e7            # ₹100 crore (limits from 1 April 2025)
 MICRO_TURNOVER_LIMIT = 10e7             # ₹10 crore
 
@@ -302,8 +303,11 @@ lawyer or a finance expert, so use plain words.
 
 Answer using only the passages in <sources> and the figures in <business_facts>.
 - After each legal point, cite the passage label in square brackets, for example [Sec 16] or \
-[Income-tax Sec 43B(h)].
-- Copy rupee figures and dates from <business_facts> exactly; do not recompute them.
+[Income-tax Sec 43B(h)]. Only labels of <source> passages go in brackets; never cite a customer, \
+an invoice or <business_facts>.
+- Copy rupee figures, dates and invoice lists from <business_facts> exactly; do not recompute or recount them.
+- "DISPUTED" in the ledger only means the invoice is marked disputed. Do not say the buyer objected in \
+writing; say that a written objection within 15 days of delivery, if there was one, would move the date.
 - Explain the law in your own plain words; do not copy more than a few words of the sources.
 - Mention any condition that changes the answer, such as Udyam registration or a written objection by the buyer.
 - If the sources do not cover the question, say so in one sentence and suggest the state MSME Facilitation \
@@ -362,43 +366,71 @@ def gemini_label(model: str) -> str:
     return "Gemini " + " ".join(p if p[:1].isdigit() else p.capitalize() for p in model.split("-")[1:])
 
 
+def _gemini_once(body: dict, api_key: str, model: str, read_timeout: float) -> str:
+    """One complete (non-streamed) Gemini answer, or GeminiError / requests.RequestException."""
+    resp = requests.post(GEMINI_GENERATE_URL.format(model=model), headers={"x-goog-api-key": api_key},
+                         json=body, timeout=(4, read_timeout))
+    resp.encoding = "utf-8"                # keeps Hindi / Telugu intact
+    try:
+        data = resp.json()
+    except ValueError:
+        raise GeminiError(resp.status_code, resp.text[:200]) from None
+    if resp.status_code != 200 or "error" in data:
+        err = data.get("error", {})
+        raise GeminiError(int(err.get("code") or resp.status_code), err.get("message", ""))
+    if data.get("promptFeedback", {}).get("blockReason"):
+        return "_Gemini declined to answer this question._"
+    cand = (data.get("candidates") or [{}])[0]
+    text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
+    if cand.get("finishReason") != "STOP" or not text.strip():
+        raise GeminiError(0, f"answer stopped early ({cand.get('finishReason') or 'empty'})")
+    return text
+
+
 def stream_gemini_answer(question: str, passages: Sequence[Passage], f: Facts, history: Sequence[dict],
-                         api_key: str, model: str = GEMINI_DEFAULT_MODEL) -> Iterator[str]:
+                         api_key: str, model: str = GEMINI_DEFAULT_MODEL, backup_model: str | None = None,
+                         typing_delay: float = 0.006) -> Iterator[str]:
     """Same grounding and instructions as Claude, sent to Google's Gemini REST API.
 
-    Plain HTTPS through `requests` (already a Streamlit dependency), so no extra compiled packages.
-    Raises GeminiError on an HTTP error and requests.RequestException on a network failure.
+    Google's free tier is sometimes overloaded: it can stop mid-answer with a 503 or take a minute. So the
+    whole answer is fetched first (nothing half-written ever reaches the screen); if `model` is busy, slow
+    (over 15 s) or cuts the answer short, `backup_model` is asked once. The finished text is then shown
+    word by word. Plain HTTPS through `requests`, so no extra compiled packages.
+    Raises GeminiError on an API error and requests.RequestException on a network failure.
     """
     contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
                 for m in history[-6:]]
     contents.append({"role": "user", "parts": [{"text": _user_block(question, passages, f)}]})
     body = {"system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]}, "contents": contents}
-    resp = requests.post(GEMINI_URL.format(model=model), headers={"x-goog-api-key": api_key}, json=body,
-                         stream=True, timeout=(4, 60))
-    with resp:
-        if resp.status_code != 200:
-            try:
-                message = resp.json().get("error", {}).get("message", "")
-            except ValueError:
-                message = resp.text[:200]
-            raise GeminiError(resp.status_code, message)
-        resp.encoding = "utf-8"            # keeps Hindi / Telugu intact; SSE responses carry no charset
-        finish = None
-        for line in resp.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data:"):
-                continue
-            chunk = json.loads(line[5:].strip())
-            if chunk.get("promptFeedback", {}).get("blockReason"):
-                yield "\n\n_Gemini declined to answer this question._"
-                return
-            for cand in chunk.get("candidates", []):
-                for part in cand.get("content", {}).get("parts", []):
-                    if part.get("text") and not part.get("thought"):
-                        yield part["text"]
-                finish = cand.get("finishReason") or finish
-    if finish != "STOP":
-        # Cut short (MAX_TOKENS, RECITATION, SAFETY, dropped connection ...): let the caller add the offline answer.
-        raise GeminiError(0, f"answer stopped early ({finish or 'connection ended'})")
+    backup = backup_model or (GEMINI_LITE_MODEL if model != GEMINI_LITE_MODEL else GEMINI_DEFAULT_MODEL)
+    # Overload spikes ("503 high demand") are usually over within a second or two, so: the chosen model,
+    # the same model once more after a short pause, then the backup model, all inside 25 seconds.
+    attempts = [(model, 12.0), (model, 10.0), (backup, 10.0)]
+    deadline = time.monotonic() + 25
+    text, first_error = None, None
+    for i, (name, read_timeout) in enumerate(attempts):
+        remaining = deadline - time.monotonic()
+        if remaining < 3:
+            break
+        if i == 1 and isinstance(first_error, requests.Timeout):
+            continue                       # a model that was too slow will not be fast a second later
+        try:
+            text = _gemini_once(body, api_key, name, read_timeout=min(read_timeout, remaining))
+            break
+        except GeminiError as err:
+            if err.status_code in (400, 401, 403, 404):
+                raise                      # bad key or model name: asking again will not help
+            first_error = first_error or err
+        except requests.Timeout as err:
+            first_error = first_error or err
+        # requests.ConnectionError (no network at all) propagates straight away
+        if i == 0:
+            time.sleep(1.0)
+    if text is None:
+        raise first_error
+    for word in re.findall(r"\S+\s*", text):
+        yield word
+        time.sleep(typing_delay)
 
 
 def answer_offline(question: str, ctx: BusinessContext) -> tuple:

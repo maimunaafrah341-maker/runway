@@ -946,6 +946,8 @@ CLAUDE_API_ERRORS = (anthropic.APIStatusError,) if anthropic else ()
 def gemini_problem(err: GeminiError) -> str:
     if err.status_code == 0:
         return "Gemini's answer was cut short, so the full offline answer is below."
+    if err.status_code in (500, 503):
+        return "Gemini is busy right now (Google's servers are overloaded), so this is the offline answer."
     if err.status_code == 429:
         return "Gemini's free-tier limit is used up for now, so this is the offline answer."
     if err.status_code in (401, 403) or "API key" in err.message:
@@ -1009,7 +1011,8 @@ def legal_assistant() -> None:
             st.session_state.pop("legal_pick", None)
             st.rerun(scope="fragment")
 
-    chat_box = st.container(height=560)
+    # Fits the welcome message until the first question, then becomes a fixed-height scrolling chat.
+    chat_box = st.container(height=560 if msgs else "content", border=True)
     with chat_box:
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             st.markdown(
@@ -1062,10 +1065,14 @@ def legal_assistant() -> None:
                         stream = stream_gemini_answer(prompt, passages, facts, history, w["key"], w["model"])
                     else:
                         stream = stream_claude_answer(prompt, passages, facts, history, w["key"])
-                    answer = st.write_stream(stream)
+                    with st.spinner(f"{writer_name} is writing the answer…"):
+                        answer = st.write_stream(stream)
                     mode = "online"
                 except GeminiError as err:
                     st.warning(gemini_problem(err), icon=":material/error:")
+                except requests.Timeout:
+                    st.warning("Gemini took too long to answer, so this is the offline answer.",
+                               icon=":material/hourglass_bottom:")
                 except requests.RequestException:
                     st.warning("Could not reach Gemini (no internet?), so this is the offline answer.",
                                icon=":material/wifi_off:")
