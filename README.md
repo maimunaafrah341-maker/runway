@@ -25,17 +25,22 @@ causing it, and what to do first** — ranked in rupees.
 
 ## Screenshots
 
-**1 · Predict: when will cash run short?** Shortfall risk, the likely crunch window, and a 60-day
-forecast of the bank balance across 5,000 simulated futures, with the real bills behind each drop.
+**1 · Predict: when will cash run short?** The first screen states the risk, the likely crunch window
+and the typical low point, then a **"Do this first"** bar with the best action and the credit line to
+arrange (amount and date). Below it: a 60-day forecast across 5,000 simulated futures with the real bills
+behind each drop, how bad it gets (typical low, worst case in 1 of 10 futures, days below ₹0) and an
+**Assumptions** panel.
 
 ![Predict tab: KPI cards and 60-day cash forecast fan chart](docs/screenshots/01-predict.png)
 
 **2 · Explain: which invoices cause it?** The five unpaid invoices whose late payment adds most to
-the risk, found by re-running the simulation as if each were paid on time.
+the risk, found by re-running the simulation as if each were paid on time, plus the combined effect:
+if the top three are all paid on time, the 30-day risk falls from 89% to 67%.
 
 ![Explain tab: top five risk-driving invoices](docs/screenshots/02-explain.png)
 
-**3 · Act: what should I do first?** Actions ranked by net rupee gain, plus a ready-to-send
+**3 · Act: what should I do first?** Actions ranked by net rupee gain, a downloadable **14-day cash
+action plan** (CSV: ranked actions, when to line up credit, every bill due), and a ready-to-send
 WhatsApp alert in English, Hindi or Telugu.
 
 ![Act tab: ranked interventions and WhatsApp alert](docs/screenshots/03-act.png)
@@ -43,6 +48,11 @@ WhatsApp alert in English, Hindi or Telugu.
 **4 · Proof: does it work?** A 90-day backtest on data the model had not seen, against four simpler methods.
 
 ![Proof tab: backtest results against baselines](docs/screenshots/04-proof.png)
+
+**5 · Ask: what does the law say?** A RAG legal assistant on the MSMED Act 2006 and the company's own
+invoices: *"Can I legally charge Vindhya interest?"* → ₹29,582 so far, with the sections it relied on.
+
+![Ask tab: legal assistant answering an interest question with cited sections](docs/screenshots/05-ask.png)
 
 ---
 
@@ -102,7 +112,8 @@ company data.
 | `python evaluation/backtest.py` | 90-point rolling backtest vs. 3 baselines + calibration curve | ~4 min |
 | `python evaluation/tuner.py` | Cross-validated penalizer grid search, writes `evaluation/tuning_report.json` | ~20 s |
 | `python -m unittest tests.test_security_and_edge_cases -v` | Input sanitizer + engine edge cases (6 tests) | <1 s |
-| `python -m unittest tests.test_assistant -v` | Legal assistant: interest maths, retrieval, offline answers (14 tests) | <1 s |
+| `python -m unittest tests.test_assistant -v` | Legal assistant: interest maths, retrieval, offline answers (15 tests) | <1 s |
+| `python -m unittest tests.test_engine_extras -v` | Joint "these invoices paid on time" risk (4 tests) | ~5 s |
 
 Run them from the repository root.
 
@@ -171,6 +182,9 @@ survival curve S(t), which handles unpaid (censored) invoices correctly.
 - Outputs P(cash < 0) at 14/30/60 days, P10/P50/P90 bands, and the likely shortfall window.
 - **Risk drivers**: for each open invoice, re-run the *same* random paths as if it were paid on its
   due date; the drop in P(deficit) is its contribution. Top 5 are reported.
+  `joint_counterfactual_risk()` does the same for several invoices at once (top 3 on time: 89% → 67%).
+- **Severity, not just risk**: the dashboard also reports the typical low point, the 1-in-10 worst
+  low (which sets the credit line to arrange, and by when) and the days the typical balance is below ₹0.
 
 ### 4. What to do first — [`engine/optimizer.py`](engine/optimizer.py)
 Four actions are simulated per risky invoice, each changing only that invoice's payment curve:
@@ -277,3 +291,13 @@ runway/
 - The legal assistant gives general information from the Act's text, not legal advice. Its interest
   figures assume acceptance on the invoice date and use today's bank rate for the whole period.
   Written objections by the buyer (which delay the clock) are not in the data.
+- The forecast ignores new sales made after the ledger date and credit lines already in place, so it
+  leans cautious.
+
+## What's next
+
+- **What-if planner:** pick actions (collect an invoice early, delay a vendor, draw on credit) and see the
+  new risk, low point and recovery date recalculated on the same simulated futures.
+- **Real ledgers:** Tally / Zoho import through the existing sanitizer.
+- **Learned action effects:** replace the stated assumptions with each buyer's observed responses.
+- **Weekly risk trend** and a **cash-bridge view** of the crunch week; TReDS invoice discounting as an action.

@@ -159,7 +159,27 @@ st.markdown(
     /* Greeting */
     .eyebrow { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #00E5FF; font-weight: 700; margin-bottom: 4px; }
     .greeting-title { font-size: 32px; font-weight: 700; letter-spacing: -0.5px; color: #FFFFFF; margin-bottom: 4px; }
-    .greeting-sub { font-size: 15px; color: #CBD5E1; margin-bottom: 22px; }
+    .greeting-sub { font-size: 15.5px; color: #CBD5E1; margin-bottom: 16px; max-width: 900px; line-height: 1.5; }
+    .greeting-sub b { color: #FFFFFF; }
+
+    /* "Do this first" strip: the top action on the first screen */
+    .do-strip {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 10px 26px;
+        background: rgba(0, 229, 255, 0.06); border: 1px solid rgba(0, 229, 255, 0.25);
+        border-left: 3px solid #00E5FF; border-radius: 10px;
+        padding: 12px 18px; margin: 0 0 18px 0; font-size: 14px; color: #E2E8F0;
+    }
+    .do-strip b { color: #FFFFFF; }
+    .do-strip b.good { color: #34D399; }
+    .do-title { font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: #00E5FF; font-weight: 700; }
+    .do-step { display: inline; }
+    .do-num {
+        display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+        border-radius: 50%; background: #00E5FF; color: #070B11; font-weight: 800; font-size: 12px; margin-right: 8px;
+        vertical-align: middle;
+    }
+    .do-more { color: #94A3B8; font-size: 12.5px; margin-left: auto; }
+    .kpi-label[title], .summary-label[title] { cursor: help; }
 
     /* KPI cards */
     .kpi-card {
@@ -310,15 +330,18 @@ CAL_SVG = (
 def load_engine(seed: int = SEED):
     invoices, expenses, cash = generate_msme_ledger(seed=seed)
     as_of = invoices.attrs["as_of_date"]
-    sim, actions, _ = run_runway_pipeline(
+    sim, actions, simulator = run_runway_pipeline(
         invoices, expenses, cash, as_of_date=as_of,
         n_simulations=N_SIMULATIONS, horizon_days=HORIZON_DAYS, rho=RHO, seed=seed,
     )
+    # Risk if the top three risk-driving invoices were all paid on time, on the same 5,000 futures
+    top3 = [d["invoice_id"] for d in sim.top_risk_invoices[:3]]
+    p_top3 = simulator.joint_counterfactual_risk(top3) if top3 else None
     history = reconstruct_cash_history(invoices, expenses, cash)
-    return invoices, expenses, float(cash), pd.Timestamp(as_of), sim, actions, history
+    return invoices, expenses, float(cash), pd.Timestamp(as_of), sim, actions, history, top3, p_top3
 
 
-invoices, expenses, cash_today, as_of, sim, actions, history = load_engine()
+invoices, expenses, cash_today, as_of, sim, actions, history, top3_ids, p_top3 = load_engine()
 
 # --------------------------------------------------------------------------- #
 # Derived numbers (all from the engine output)
@@ -362,14 +385,24 @@ if below.any():
 else:
     recover_text, recover_sub = "Stays above ₹0", "In the typical case, cash never goes negative"
 
-# Credit line that keeps 9 out of 10 simulated futures above ₹0 for 30 days
+# Severity, not just risk: the lowest balance in the worst 1-in-10 futures, and days below ₹0 (typical)
 path_min_30 = np.asarray(sim.trajectories)[:, :H30].min(axis=1)
-buffer_needed = max(0.0, -float(np.percentile(path_min_30, 10)))
+worst_low = float(np.percentile(path_min_30, 10))
+buffer_needed = max(0.0, -worst_low)       # credit line that keeps 9 in 10 futures above ₹0 for 30 days
+days_below = int((p50[:H30] < 0).sum())
+first_risky_day = win_start if win_start is not None else (dates[first_neg] if below.any() else None)
+credit_by = max(as_of + pd.Timedelta(days=1), first_risky_day - pd.Timedelta(days=1)) if first_risky_day is not None else None
 
-if sim.p_deficit_14d >= 0.5:
-    greeting_sub = "Your cash position needs attention this week."
+top_action = actions[0] if actions else None
+top_action_customer = customer_names.get(top_action.customer_id, top_action.customer_id) if top_action else ""
+
+# One-line headline: how likely, when, how bad
+if sim.p_deficit_30d >= 0.3 and win_start is not None:
+    greeting_sub = (f"<b>{sim.p_deficit_30d:.0%} chance cash runs short</b> in the next 30 days, most likely "
+                    f"<b>{window_text}</b>. In the typical future the balance bottoms out at "
+                    f"<b>{inr(low_value)}</b> on {day(low_date)}.")
 elif sim.p_deficit_30d >= 0.3:
-    greeting_sub = "Keep an eye on cash over the next month."
+    greeting_sub = f"<b>{sim.p_deficit_30d:.0%} chance cash runs short</b> in the next 30 days."
 else:
     greeting_sub = "Cash looks healthy for the next month."
 
@@ -425,6 +458,24 @@ with col_time:
         unsafe_allow_html=True,
     )
 
+# Prescription on the first screen, not only in tab 3
+do_steps = []
+if top_action is not None:
+    do_steps.append(
+        f'<b>{ACTION_LABELS.get(top_action.action_type, top_action.action_type)}</b> · {top_action_customer}, '
+        f'{top_action.invoice_id} → <b class="good">{inr(top_action.net_benefit, signed=True)} net</b>'
+    )
+if credit_by is not None and buffer_needed > 0:
+    do_steps.append(f'<b>Line up {inr(buffer_needed)} of credit by {day(credit_by)}</b> · covers 9 in 10 futures')
+if do_steps:
+    steps_html = "".join(f'<span class="do-step"><span class="do-num">{i}</span>{s}</span>'
+                         for i, s in enumerate(do_steps, 1))
+    st.markdown(
+        f'<div class="do-strip"><span class="do-title">Do this first</span>{steps_html}'
+        f'<span class="do-more">Full ranked list: tab 3 · Act</span></div>',
+        unsafe_allow_html=True,
+    )
+
 with st.expander("New here? How to read this dashboard", icon=":material/help:"):
     st.markdown(
         f"""
@@ -457,7 +508,7 @@ with k1:
     st.markdown(
         f"""
         <div class="kpi-card" style="border-bottom: 2px solid #00E5FF;">
-            <div class="kpi-label">Cash balance today</div>
+            <div class="kpi-label" title="Closing bank balance on the forecast date, from the ledger.">Cash balance today</div>
             <div class="kpi-value">{inr(cash_today)}</div>
             {delta_html}
             <div class="kpi-plain">Money in the bank on {as_of:%b %d}.</div>
@@ -473,7 +524,7 @@ for col, label, p, days in ((k2, "14-day shortfall risk", sim.p_deficit_14d, 14)
         st.markdown(
             f"""
             <div class="kpi-card">
-                <div class="kpi-label"><span>{label}</span>{icon}</div>
+                <div class="kpi-label" title="Share of the {N_SIMULATIONS:,} simulated futures in which the bank balance goes below ₹0 at least once within {days} days."><span>{label}</span>{icon}</div>
                 <div class="kpi-value">{p:.1%}</div>
                 {risk_badge(p)}
                 <div class="kpi-plain">Chance the bank balance drops below ₹0 in the next {days} days.</div>
@@ -486,7 +537,7 @@ with k4:
     st.markdown(
         f"""
         <div class="kpi-card">
-            <div class="kpi-label"><span>Most likely crunch</span>{CAL_SVG}</div>
+            <div class="kpi-label" title="In 8 of 10 simulated futures that run short, the first day below ₹0 falls in this window."><span>Most likely crunch</span>{CAL_SVG}</div>
             <div class="kpi-value" style="font-size: 30px;">{window_text}</div>
             <div class="kpi-plain"><span style="color: #FBBF24; font-weight: 600;">Bills due by then:</span> {trigger_text}</div>
         </div>
@@ -603,40 +654,65 @@ with tab_predict:
     )
     st.plotly_chart(fig, alt="60-day cash forecast fan chart with typical, optimistic and pessimistic bank balance")
 
-    s1, s2, s3 = st.columns(3)
-    with s1:
+    # Stretches of days the typical balance is below ₹0 (there can be more than one dip)
+    neg30, dips, i = p50[:H30] < 0, [], 0
+    while i < H30:
+        if neg30[i]:
+            j = i
+            while j + 1 < H30 and neg30[j + 1]:
+                j += 1
+            dips.append(day(dates[i]) if i == j else f"{day(dates[i])} – {day(dates[j])}")
+            i = j + 1
+        else:
+            i += 1
+    below_text = (f"Below ₹0 on {days_below} of the next 30 days: {' and '.join(dips)}." if days_below
+                  else "Stays above ₹0 in the typical future.")
+    if len(dips) > 1:
+        recover_sub = f"After the first dip; it dips again {', '.join(dips[1:])}"
+    if credit_by is not None and buffer_needed > 0:
+        credit_value = f"{inr(buffer_needed)} by {day(credit_by)}"
+        credit_sub = ("An overdraft or credit line this size keeps the account above ₹0 in 9 of 10 futures. "
+                      "The actions in tab 3 shrink how much you need.")
+    else:
+        credit_value, credit_sub = "Not needed", "Cash stays above ₹0 in 9 of 10 futures over the next 30 days."
+    s1, s2, s3, s4 = st.columns(4)
+    for col, label, tip, value, colour, sub in (
+        (s1, "Typical low point", "The lowest balance in the median simulated future, next 30 days.",
+         inr(low_value), "#F87171" if low_value < 0 else "#FFFFFF", f"On {low_date:%b %d}. {below_text}"),
+        (s2, "Worst case (1 in 10 futures)", "Only 1 in 10 simulated futures goes lower than this within 30 days.",
+         inr(worst_low), "#F87171" if worst_low < 0 else "#FFFFFF", "How deep it gets if customers pay slower than usual."),
+        (s3, "Back above ₹0 (typical)", "The first day the median future is above ₹0 again.",
+         recover_text, "#34D399", f"{recover_sub}."),
+        (s4, "Arrange credit", "Credit line that keeps 9 of 10 futures above ₹0 for 30 days, needed a day before the crunch window.",
+         credit_value, "#FFFFFF", credit_sub),
+    ):
+        with col:
+            st.markdown(
+                f"""
+                <div class="summary-card">
+                    <div class="summary-label" title="{tip}">{label}</div>
+                    <div class="summary-value" style="color: {colour};">{value}</div>
+                    <div class="summary-sub">{sub}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    with st.expander("Assumptions behind this forecast", icon=":material/rule:"):
         st.markdown(
             f"""
-            <div class="summary-card">
-                <div class="summary-label">Lowest point, next 30 days (typical)</div>
-                <div class="summary-value" style="color: {'#F87171' if low_value < 0 else '#FFFFFF'};">{inr(low_value)}</div>
-                <div class="summary-sub">On {low_date:%B %d}, in the typical simulated future.</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with s2:
-        st.markdown(
-            f"""
-            <div class="summary-card">
-                <div class="summary-label">Back above ₹0 (typical)</div>
-                <div class="summary-value" style="color: #34D399;">{recover_text}</div>
-                <div class="summary-sub">{recover_sub}.</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with s3:
-        st.markdown(
-            f"""
-            <div class="summary-card">
-                <div class="summary-label">Safety buffer to arrange</div>
-                <div class="summary-value" style="color: #FFFFFF;">{inr(buffer_needed)}</div>
-                <div class="summary-sub">An overdraft or credit line this size keeps the account above ₹0
-                in 9 out of 10 simulated futures over the next 30 days.</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+- **Data:** a simulated auto-parts supplier with 25 customers and 500 invoices; ledger date {as_of:%d %b %Y}.
+- **When customers pay:** a survival model (Cox proportional hazards) learns from each customer's past delays,
+  invoice size, credit terms and disputes. Invoices that are still unpaid count as "not paid yet", not as lost.
+- **Linked lateness:** a customer's invoices move together; if one is late, the others tend to be late too
+  (Gaussian copula, ρ = {RHO}).
+- **Bills:** wages, loan EMI and rent, GST and raw-material payments on their fixed due dates.
+- **Not counted:** new sales made after today and credit lines you already have. Both would only help,
+  so the forecast leans cautious.
+- **{N_SIMULATIONS:,} simulated futures, {HORIZON_DAYS} days each.** "Typical" is the median future; the
+  shaded band holds 8 in 10 futures; "worst case" is the 1-in-10 low.
+- **Actions:** each action's effect is a stated assumption, printed on its card in tab 3.
+            """
         )
 
 # --------------------------------------------------------------------------- #
@@ -712,6 +788,20 @@ with tab_explain:
                 """,
                 unsafe_allow_html=True,
             )
+            if p_top3 is not None and len(top3_ids) >= 2:
+                st.markdown(
+                    f"""
+                    <div class="info-card" style="border-left: 3px solid #34D399;">
+                        <div class="summary-label">If the top {len(top3_ids)} are paid on time</div>
+                        <div style="font-size: 26px; font-weight: 700; color: #FFFFFF; margin: 4px 0;">
+                            {sim.p_deficit_30d:.0%} <span style="color: #94A3B8;">→</span>
+                            <span style="color: #34D399;">{p_top3:.0%}</span></div>
+                        <div class="summary-sub">30-day shortfall risk if {", ".join(top3_ids)} all arrive on their
+                        due dates (today if already overdue), on the same {N_SIMULATIONS:,} futures.</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
         table = pd.DataFrame({
             "Invoice": drivers["invoice_id"],
@@ -746,6 +836,40 @@ with tab_act:
         'measures how much smaller the expected cash gap becomes. <b>Net gain = cash gap avoided − cost of the action.</b> '
         'The top card is the best rupee-for-rupee move.</div>',
         unsafe_allow_html=True,
+    )
+
+    # A dated 14-day plan: ranked actions tomorrow, the credit line before the crunch, and every bill due
+    plan_rows = []
+    tomorrow = as_of + pd.Timedelta(days=1)
+    invoice_amounts = invoices.set_index("invoice_id")["amount"]
+    for rank, act in enumerate(actions[:5], 1):
+        plan_rows.append({
+            "Date": tomorrow, "Step": f"Action {rank}: {ACTION_LABELS.get(act.action_type, act.action_type)}",
+            "Who": f"{customer_names.get(act.customer_id, act.customer_id)} · {act.invoice_id}",
+            "Amount (Rs)": round(float(invoice_amounts.get(act.invoice_id, 0.0))),
+            "Expected effect": (f"Net gain {inr(act.net_benefit)}: avoids {inr(act.expected_shortfall_avoided)} of cash gap "
+                                f"for {inr(act.cost_of_action)}. {ACTION_EFFECT.get(act.action_type, '')}"),
+        })
+    if credit_by is not None and buffer_needed > 0:
+        plan_rows.append({
+            "Date": credit_by, "Step": "Line up an overdraft or credit line", "Who": "Bank",
+            "Amount (Rs)": round(buffer_needed),
+            "Expected effect": "Keeps the account above Rs 0 in 9 of 10 simulated futures for 30 days.",
+        })
+    for b in upcoming[upcoming["due_date"] <= as_of + pd.Timedelta(days=14)].itertuples(index=False):
+        plan_rows.append({
+            "Date": b.due_date, "Step": f"Bill due: {CATEGORY_SHORT.get(b.category, b.category)}",
+            "Who": getattr(b, "description", ""), "Amount (Rs)": -round(float(b.amount)),
+            "Expected effect": "Fixed date" + ("" if not getattr(b, "is_flexible", False) else "; can slip up to 7 days"),
+        })
+    plan = pd.DataFrame(plan_rows).sort_values("Date", kind="stable")
+    plan["Date"] = pd.to_datetime(plan["Date"]).dt.strftime("%d %b %Y")
+    st.download_button(
+        "Download 14-day cash action plan", data=plan.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"runway_action_plan_{as_of:%Y%m%d}.csv", mime="text/csv", type="primary",
+        icon=":material/download:", on_click="ignore",
+        help="A dated to-do list for the next 14 days: the ranked actions, when to line up credit, and every "
+             "bill that falls due. Opens in Excel.",
     )
 
     act_col1, act_col2 = st.columns([3, 2])

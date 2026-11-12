@@ -152,6 +152,20 @@ class CashFlowSimulator:
         out["marginal_risk_reduction"] = np.maximum(0.0, p_base - p_cf)
         return out.sort_values("marginal_risk_reduction", ascending=False, kind="stable").reset_index(drop=True)
 
+    def joint_counterfactual_risk(self, invoice_ids: List[str], days: int = COUNTERFACTUAL_HORIZON_DAYS) -> float:
+        """P(cash < 0 within `days`) if every listed invoice is paid on its due date (day 1 if already due),
+        on the same simulated paths as the last run(). Same shift as _counterfactual_risk, summed over invoices."""
+        if self.trajectories_ is None:
+            raise RuntimeError("call run() first")
+        cash = self.trajectories_[:, :days].copy()
+        t = np.arange(days)[None, :]
+        for inv_id in invoice_ids:
+            k = self.open_invoice_ids_.index(inv_id)
+            row = self.open_invoices_.iloc[k]
+            cf_day = max(0, (pd.Timestamp(row["due_date"]) - self.as_of_).days - 1)
+            cash += float(row["amount"]) * ((t >= cf_day).astype(float) - (t >= self.payment_days_[:, k:k + 1]))
+        return float((cash < 0).any(axis=1).mean())
+
     # ------------------------------------------------------------------ #
     # Main entry point
     # ------------------------------------------------------------------ #
@@ -226,6 +240,7 @@ class CashFlowSimulator:
         self.uniforms_, self.payment_probs_, self.payment_days_ = uniforms, payment_probs, payment_days
         self.trajectories_, self.outflows_, self.risk_table_ = trajectories, outflows, risk
         self.open_invoice_ids_ = open_invoices_df["invoice_id"].tolist()
+        self.open_invoices_, self.as_of_ = open_invoices_df, as_of
         p10, p50, p90 = np.percentile(trajectories, [10, 50, 90], axis=0)
         return SimulationResult(
             trajectories=trajectories,
