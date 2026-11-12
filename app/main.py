@@ -334,9 +334,11 @@ def load_engine(seed: int = SEED):
         invoices, expenses, cash, as_of_date=as_of,
         n_simulations=N_SIMULATIONS, horizon_days=HORIZON_DAYS, rho=RHO, seed=seed,
     )
-    # Risk if the top three risk-driving invoices were all paid on time, on the same 5,000 futures
+    # Risk if the top three risk-driving invoices were all paid on time, on the same 5,000 futures.
+    # getattr: Streamlit Cloud can keep an older engine module in memory after a push; hide the card, don't crash.
     top3 = [d["invoice_id"] for d in sim.top_risk_invoices[:3]]
-    p_top3 = simulator.joint_counterfactual_risk(top3) if top3 else None
+    joint = getattr(simulator, "joint_counterfactual_risk", None)
+    p_top3 = joint(top3) if (top3 and joint) else None
     history = reconstruct_cash_history(invoices, expenses, cash)
     return invoices, expenses, float(cash), pd.Timestamp(as_of), sim, actions, history, top3, p_top3
 
