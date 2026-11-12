@@ -39,9 +39,26 @@ for tag, words in {
         _CONCEPTS[w] = tag
 
 
+# Hindi and Telugu words, matched as substrings (Indic vowel signs break simple word splitting).
+_NATIVE: Dict[str, str] = {}
+for tag, words in {
+    "interest": "ब्याज सूद వడ్డీ",
+    "late": "देर देरी बकाया भुगतान उधार ఆలస్యం బాకీ చెల్లింపు",
+    "complaint": "शिकायत मुकदमा नोटिस वसूली परिषद ఫిర్యాదు నోటీసు కేసు",
+    "tax": "टैक्स आयकर कटौती పన్ను",
+    "register": "पंजीकरण रजिस्ट्रेशन उद्यम నమోదు ఉద్యమ్",
+    "eligible": "लागू पात्र सूक्ष्म लघु వర్తిస్తుంది అర్హత",
+    "deadline": "दिन రోజులు",
+    "appeal": "अपील चुनौती अदालत అప్పీల్ కోర్టు",
+}.items():
+    for w in words.split():
+        _NATIVE[w] = tag
+
+
 def tokenize(text: str) -> List[str]:
+    native = ["#" + tag for word, tag in _NATIVE.items() if word in text]
     raw = re.findall(r"[a-z0-9]+", text.lower().replace("43b(h)", "43bh"))
-    out: List[str] = []
+    out: List[str] = list(native)
     for w in raw:
         if w in _STOP:
             continue

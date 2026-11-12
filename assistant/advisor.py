@@ -169,6 +169,9 @@ def retrieve(question: str, named_customers: Sequence[str], k: int = 4) -> List[
     needed = list(_CUSTOMER_QUESTION) if named_customers else []
     for tag in sorted(concepts(question)):
         needed += _ALWAYS_WITH.get(tag, ())
+    if not hits and not needed and re.search(r"[^\x00-\x7F]", question):
+        # A Hindi / Telugu question the keyword list missed: give the model the core late-payment sections.
+        needed = list(_CUSTOMER_QUESTION)
     for pid in needed:
         p = PASSAGE_BY_ID[pid]
         if p not in hits:
@@ -301,6 +304,7 @@ Answer using only the passages in <sources> and the figures in <business_facts>.
 - After each legal point, cite the passage label in square brackets, for example [Sec 16] or \
 [Income-tax Sec 43B(h)].
 - Copy rupee figures and dates from <business_facts> exactly; do not recompute them.
+- Explain the law in your own plain words; do not copy more than a few words of the sources.
 - Mention any condition that changes the answer, such as Udyam registration or a written objection by the buyer.
 - If the sources do not cover the question, say so in one sentence and suggest the state MSME Facilitation \
 Council or a lawyer. Do not answer from memory.
@@ -379,6 +383,7 @@ def stream_gemini_answer(question: str, passages: Sequence[Passage], f: Facts, h
                 message = resp.text[:200]
             raise GeminiError(resp.status_code, message)
         resp.encoding = "utf-8"            # keeps Hindi / Telugu intact; SSE responses carry no charset
+        finish = None
         for line in resp.iter_lines(decode_unicode=True):
             if not line or not line.startswith("data:"):
                 continue
@@ -390,6 +395,10 @@ def stream_gemini_answer(question: str, passages: Sequence[Passage], f: Facts, h
                 for part in cand.get("content", {}).get("parts", []):
                     if part.get("text") and not part.get("thought"):
                         yield part["text"]
+                finish = cand.get("finishReason") or finish
+    if finish != "STOP":
+        # Cut short (MAX_TOKENS, RECITATION, SAFETY, dropped connection ...): let the caller add the offline answer.
+        raise GeminiError(0, f"answer stopped early ({finish or 'connection ended'})")
 
 
 def answer_offline(question: str, ctx: BusinessContext) -> tuple:

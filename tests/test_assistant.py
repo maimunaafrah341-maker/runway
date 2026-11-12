@@ -65,6 +65,12 @@ class TestRetrieval(unittest.TestCase):
     def test_hinglish_word_for_interest(self):
         self.assertIn("Sec 16", self.top("byaj kitna milega"))
 
+    def test_hindi_and_telugu_words(self):
+        self.assertIn("Sec 16", self.top("क्या मैं ब्याज ले सकता हूँ?"))
+        hits = self.top("देर से भुगतान करने वाले ग्राहक की शिकायत कैसे करूँ?")
+        self.assertTrue({"Sec 18", "MSME Samadhaan"} & set(hits))
+        self.assertIn("Sec 16", self.top("వడ్డీ వసూలు చేయవచ్చా?"))
+
     def test_complaint_question(self):
         hits = self.top("how do I file a complaint against a buyer")
         self.assertTrue({"Sec 18", "MSME Samadhaan"} & set(hits))

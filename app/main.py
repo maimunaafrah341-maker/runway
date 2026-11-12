@@ -17,6 +17,24 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+
+def load_dotenv(path: Path) -> None:
+    """Read KEY=VALUE lines from a local, git-ignored .env file (e.g. GEMINI_API_KEY).
+
+    Real environment variables win; Streamlit Cloud uses its Secrets page instead.
+    """
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.removeprefix("export ").partition("=")
+        os.environ.setdefault(name.strip(), value.strip().strip("\"'"))
+
+
+load_dotenv(ROOT_DIR / ".env")
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -926,6 +944,8 @@ CLAUDE_API_ERRORS = (anthropic.APIStatusError,) if anthropic else ()
 
 
 def gemini_problem(err: GeminiError) -> str:
+    if err.status_code == 0:
+        return "Gemini's answer was cut short, so the full offline answer is below."
     if err.status_code == 429:
         return "Gemini's free-tier limit is used up for now, so this is the offline answer."
     if err.status_code in (401, 403) or "API key" in err.message:
