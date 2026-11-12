@@ -1,0 +1,17 @@
+# Locked dark theme so Streamlit's own widgets (tabs, tables, buttons, radios)
+# use light text on the dark background the dashboard is designed for.
+[theme]
+base = "dark"
+primaryColor = "#0891B2"
+backgroundColor = "#070B11"
+secondaryBackgroundColor = "#111827"
+textColor = "#E2E8F0"
+borderColor = "#1F2937"
+linkColor = "#22D3EE"
+dataframeHeaderBackgroundColor = "#1F2937"
+dataframeHeaderTextColor = "#F8FAFC"
+dataframeBorderColor = "#1F2937"
+chartCategoricalColors = ["#00E5FF", "#10B981", "#F59E0B", "#EF4444", "#A78BFA", "#94A3B8"]
+
+[client]
+toolbarMode = "minimal"

@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from engine import run_runway_pipeline
+import pandas as pd
 
 
 def format_inr(val: float) -> str:
@@ -69,7 +70,12 @@ def run_cli_demo():
     print("  " + "-" * 68)
     for inv in sim_result.top_risk_invoices:
         print(f"  {inv['invoice_id']:<15} {inv['customer'][:28]:<30} {format_inr(inv['amount']):<12} -{inv['marginal_risk_reduction']:.1%}")
-    print("  [Insight: 3 of the top 5 belong to Brahmaputra Mobility due to correlated OEM delays]")
+    drivers = sim_result.top_risk_invoices
+    if drivers:
+        counts = pd.Series([inv["customer"] for inv in drivers]).value_counts()
+        if counts.iloc[0] > 1:
+            print(f"  [Insight: {counts.iloc[0]} of the top {len(drivers)} belong to {counts.index[0]}"
+                  " — correlated delays from one customer compound the risk]")
 
     print("\n" + "—" * 72)
     print("3. ACT — ECONOMICALLY RANKED INTERVENTIONS (MAX NET BENEFIT)")

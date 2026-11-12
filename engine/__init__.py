@@ -40,11 +40,15 @@ def run_runway_pipeline(
     Returns:
         (simulation_result, recommended_actions, simulator_instance)
     """
-    if invoices_df is None or expenses_df is None or starting_cash is None:
+    if invoices_df is None:
+        # No ledger supplied: run on the synthetic demo company.
         from data.generator import generate_msme_ledger
-        invoices_df, expenses_df, gen_cash = generate_msme_ledger(seed=seed)
-        if starting_cash is None:
-            starting_cash = gen_cash
+        invoices_df, gen_expenses, gen_cash = generate_msme_ledger(seed=seed)
+        expenses_df = gen_expenses if expenses_df is None else expenses_df
+        starting_cash = gen_cash if starting_cash is None else starting_cash
+    elif expenses_df is None or starting_cash is None:
+        # Never silently swap a user's real ledger for synthetic data.
+        raise ValueError("When invoices_df is supplied, expenses_df and starting_cash are required too")
 
     # Open invoices: those without actual_payment_date
     open_invoices = invoices_df[invoices_df["actual_payment_date"].isna()].copy()

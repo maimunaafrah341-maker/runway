@@ -24,4 +24,4 @@ $RECYCLE.BIN/
 .DS_Store
 
 # Streamlit
-.streamlit/
+.streamlit/secrets.toml
