@@ -966,7 +966,8 @@ def legal_assistant() -> None:
             "Online: an AI model writes the answer", value=bool(writers), disabled=not writers,
             key="legal_online",
             help="Off = offline mode. The same law sections and numbers are used, and the answer is built "
-                 "without any internet. Turn off if the venue Wi-Fi is unreliable.",
+                 "without any internet. Turn off if the venue Wi-Fi is unreliable. To turn it on, add "
+                 "GEMINI_API_KEY (free from aistudio.google.com) or ANTHROPIC_API_KEY to the app's secrets.",
         )
         writer_name = None
         if online and len(writers) > 1:
@@ -979,10 +980,9 @@ def legal_assistant() -> None:
             st.markdown(f'<span class="badge-pill"><span class="live-dot"></span>Online · searches the Act, then '
                         f'{writer_name} writes the answer</span>', unsafe_allow_html=True)
         else:
-            note = "" if writers else " · add GEMINI_API_KEY or ANTHROPIC_API_KEY to go online"
-            st.markdown(f'<span class="badge-pill"><span class="live-dot" style="background:#F59E0B;'
-                        f'box-shadow:0 0 8px #F59E0B;"></span>Offline · searches the Act, no internet needed{note}'
-                        f'</span>', unsafe_allow_html=True)
+            st.markdown('<span class="badge-pill"><span class="live-dot" style="background:#F59E0B;'
+                        'box-shadow:0 0 8px #F59E0B;"></span>Offline · searches the Act, no internet needed'
+                        '</span>', unsafe_allow_html=True)
     with top_r:
         if st.button("New chat", icon=":material/refresh:", disabled=not msgs, width="stretch"):
             msgs.clear()
