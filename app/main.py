@@ -1923,7 +1923,8 @@ def loan_calendar(rows: list, title: str) -> None:
         nb = " "                              # keep dates and amounts on one line
         money = "" if amt is None else (f":green[{inr(amt, signed=True)}]" if amt > 0 else inr(amt))
         date_txt = f"{pd.Timestamp(d):%a, %b %d}".replace(" ", nb)
-        lines.append(f"| {date_txt} | **{what}** | {money.replace(' ', nb)} | {note} |")
+        money = money.replace(" ", nb).replace("+₹", "+⁠₹").replace("−₹", "−⁠₹")   # no break after a sign
+        lines.append(f"| {date_txt} | **{what}** | {money} | {note} |")
     st.markdown("\n".join(lines))
     events = [(d, what, f"{what}{'' if amt is None else f' ({inr(amt, signed=True)})'}. {note}")
               for d, what, amt, note in rows]
