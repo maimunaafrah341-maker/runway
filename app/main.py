@@ -52,10 +52,10 @@ from assistant.legal_corpus import BANK_RATE, BANK_RATE_CHECKED, MSMED_RATE, PAS
 from data.generator import generate_msme_ledger, reconstruct_cash_history
 from data.schemas import EXPENSE_EMI_RENT, EXPENSE_GST_TAX, EXPENSE_PAYROLL, EXPENSE_RAW_MATERIAL
 from engine import run_runway_pipeline
-from funding import (ACCEPTED, COUNTERED, DECLINED, DEMO_LENDERS, OPEN_STATUSES, WAITING, WITHDRAWN,
-                     LendingNetwork, apply_loans, calendar_ics, check_loan, credit_dips, credit_sources, fit_checks,
-                     fits, interest, lending_effect, loan_path, pick_security, safe_to_lend, split_amount,
-                     suggest_repay_day, term_sheet, treds_invoices)
+from funding import (ACCEPTED, COUNTERED, DECLINED, DEMO_LENDERS, OPEN_STATUSES, WAITING, WITHDRAWN, DemoRooms,
+                     apply_loans, calendar_ics, check_loan, credit_dips, credit_sources, fit_checks, fits, interest,
+                     lending_effect, loan_path, new_room_code, pick_security, safe_to_lend, split_amount,
+                     suggest_repay_day, term_sheet, treds_invoices, valid_room)
 
 try:  # optional: without the SDK the legal assistant runs in offline mode only
     import anthropic
@@ -100,6 +100,14 @@ if BIZ_KEY not in BUSINESSES:
 BIZ = BUSINESSES[BIZ_KEY]
 IS_LENDER = BIZ.lender_id is not None
 COMPANY_NAME, OWNER_NAME, SEED = BIZ.company, BIZ.owner, BIZ.seed
+
+# Which private demo: ?room=<code>. A visit without one starts a new room, so people trying the public link
+# never see or change each other's loan requests. Links to the other side's dashboard carry the same code.
+ROOM = str(st.query_params.get("room", "")).strip().lower()
+if not valid_room(ROOM):
+    ROOM = st.session_state.get("room") or new_room_code()
+    st.query_params["room"] = ROOM
+st.session_state["room"] = ROOM
 
 CATEGORY_SHORT = {
     EXPENSE_PAYROLL: "Wages & salaries",
@@ -393,15 +401,16 @@ BRAND_SVG = (
 
 
 # --------------------------------------------------------------------------- #
-# Lending network: one shared store for every browser session on this server, so a request sent from
-# Raghav's dashboard shows up on the lender's screen (and the answer comes back) within seconds.
+# Lending network: one store per demo room, shared by every window opened with that room's link, so a
+# request sent from Raghav's dashboard shows up on the lender's screen (and the answer comes back) within
+# seconds, and nobody else's visit can change it.
 # --------------------------------------------------------------------------- #
 @st.cache_resource
-def lending_network() -> LendingNetwork:
-    return LendingNetwork()
+def demo_rooms() -> DemoRooms:
+    return DemoRooms()
 
 
-network = lending_network()
+network = demo_rooms().get(ROOM)
 
 STATUS_BADGE = {
     WAITING: ":orange-badge[:material/schedule: Waiting for an answer]",
@@ -413,9 +422,10 @@ STATUS_BADGE = {
 
 
 def app_link(business: Optional[str] = None) -> str:
-    """A link to this app signed in as `business`, absolute when the browser reported its URL."""
+    """A link to this app signed in as `business`, in this demo room; absolute when the browser reported its URL."""
     base = (st.context.url or "").split("?")[0]
-    return f"{base}?{urlencode({'as': business})}" if business else (base or "?")
+    params = {"as": business, "room": ROOM} if business else {"room": ROOM}
+    return f"{base}?{urlencode(params)}"
 
 
 def ago(ts: float) -> str:
@@ -530,7 +540,7 @@ def my_events() -> list:
 
 
 def mark_events_read() -> None:
-    st.session_state.setdefault(f"read_{BIZ_KEY}", set()).update(e["key"] for e in my_events())
+    st.session_state.setdefault(f"read_{ROOM}_{BIZ_KEY}", set()).update(e["key"] for e in my_events())
 
 
 @st.fragment(run_every=3)
@@ -538,7 +548,7 @@ def notification_bell() -> None:
     """Header bell for both sides: a toast for anything new, a count, and quick answers without leaving the tab."""
     show_flash()
     events = my_events()
-    toasted = st.session_state.setdefault(f"toasted_{BIZ_KEY}", set())
+    toasted = st.session_state.setdefault(f"toasted_{ROOM}_{BIZ_KEY}", set())
     # A loan agreed or cancelled since the page was drawn changes the headline, risk card and chart: redraw all.
     mine = (network.requests(lender_id=BIZ.lender_id) if IS_LENDER else network.requests(borrower=COMPANY_NAME))
     stale = sum(r.status == ACCEPTED for r in mine) != len(my_loans)
@@ -551,7 +561,7 @@ def notification_bell() -> None:
             toasted.add(e["key"])
     if stale:
         st.rerun()
-    read = st.session_state.setdefault(f"read_{BIZ_KEY}", set())
+    read = st.session_state.setdefault(f"read_{ROOM}_{BIZ_KEY}", set())
     unread = sum(e["key"] not in read for e in events)
     # The popover's own label never changes (a changed label would close it while open); the count sits after it.
     row = st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small",
@@ -825,7 +835,8 @@ with h_switch:
                  format_func=lambda k: f"{BUSINESSES[k].owner} · {' '.join(BUSINESSES[k].company.split()[:2])}",
                  label_visibility="collapsed",
                  help="Demo only: switch between Raghav and the businesses that lend. In real use each business "
-                      "signs in to its own account. Open two browser windows to watch both sides live.")
+                      "signs in to its own account. To watch both sides live, open the other side with a "
+                      "'dashboard' button in tab 6: both windows then share this private demo.")
 with h_bell:
     notification_bell()
 st.markdown('<div style="border-bottom: 1px solid #1E293B; margin: 6px 0 22px 0;"></div>', unsafe_allow_html=True)
@@ -1716,9 +1727,10 @@ def source_card(s, tenor: int) -> str:
 
 def reset_network_button() -> None:
     if st.button("Reset demo network", icon=":material/restart_alt:", type="tertiary", width="stretch",
-                 help="Clears every request and restores the demo lenders, for everyone on this server."):
+                 help="Clears every request in this private demo and restores the demo lenders."):
         network.reset()
         st.rerun()
+    st.caption(f"Private demo **{ROOM}**: only windows opened from this link share these requests.")
 
 
 @st.fragment
@@ -1890,7 +1902,10 @@ def lender_inbox() -> None:
     st.markdown("#### :material/inbox: Loan requests" + (f" :red-badge[{waiting} waiting]" if waiting else ""))
     if not reqs:
         st.info("No requests yet. When a business that fits your conditions asks for a loan, it appears here "
-                "within seconds and the bell at the top lights up.", icon=":material/inbox:")
+                "within seconds and the bell at the top lights up. In this demo, requests come from Raghav's "
+                f"dashboard opened with the same link (private demo **{ROOM}**).", icon=":material/inbox:")
+        st.link_button("Open Raghav's dashboard (demo)", app_link(BORROWER_KEY), icon=":material/open_in_new:",
+                       help="The business that needs credit, in this same private demo")
     for r in reqs:
         own = lending_effect(T_paths, r.amount, day_index(r.start), day_index(r.repay), r.rate_now)
         lender_request_card(r, me, own)

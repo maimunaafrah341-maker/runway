@@ -73,7 +73,8 @@ a reminder the day before each date.
 ![Loan plan after both lenders agree: arrival, bills, repayment, dated to-do list](docs/screenshots/06b-loan-plan.png)
 
 **The lender's side: the same dashboard, with a Lend tab.** Every lender is a Runway business too
-(`?as=ganga`, or *Signed in as* at the top), with its own generated ledger and forecast, so Runway knows how
+(the *Open Ganga's dashboard* button in tab 6, or *Signed in as* at the top), with its own generated ledger and
+forecast, so Runway knows how
 much it can safely lend (₹37.37 L for 45 days for Ganga Castings, keeping ₹5 L in the bank in 9 of 10
 futures). A request that fits its conditions lights up the bell, where it can be accepted in one click. The
 Lend tab shows the terms, the borrower's on-time score (only if shared), a summary of pledged invoices
@@ -145,7 +146,7 @@ company data.
 | `python -m unittest tests.test_security_and_edge_cases -v` | Input sanitizer + engine edge cases (6 tests) | <1 s |
 | `python -m unittest tests.test_assistant -v` | Legal assistant: interest maths, retrieval, offline answers (15 tests) | <1 s |
 | `python -m unittest tests.test_engine_extras -v` | Joint "these invoices paid on time" risk (4 tests) | ~5 s |
-| `python -m unittest tests.test_funding -v` | Fund / Lend: loan checks, safe-to-lend, several loans at once, security, credit sources, lending network, calendar file (21 tests) | ~5 s |
+| `python -m unittest tests.test_funding -v` | Fund / Lend: loan checks, safe-to-lend, several loans at once, security, credit sources, lending network, private demo rooms, calendar file (24 tests) | ~5 s |
 
 Run them from the repository root.
 
@@ -371,8 +372,10 @@ runway/
 - The forecast ignores new sales made after the ledger date and credit lines already in place, so it
   leans cautious.
 - The lending network is a demo: four fictional lenders with generated ledgers, kept in memory (a restart
-  clears it) and shared by everyone using the same server. *Signed in as* switches company without a
-  login; a real deployment needs accounts. Credit-source rates and timings are typical ranges, not quotes.
+  clears it). Each visit gets its own private demo (`?room=<code>` in the link), so people trying the
+  public URL never see or change each other's requests; the *dashboard* buttons in tab 6 open the other
+  side in the same demo. *Signed in as* switches company without a login; a real deployment needs
+  accounts. Credit-source rates and timings are typical ranges, not quotes.
   Run for real, the matching would go through an RBI-regulated partner.
 
 ## What's next

@@ -1,6 +1,6 @@
 """
 Tests for the Fund tab: loan maths on the simulated futures, invoice security, credit sources, and the
-shared lending network (requests, answers, counter-offers, notifications state).
+lending network (requests, answers, counter-offers, private demo rooms).
 
 Run: python -m unittest tests.test_funding -v
 """
@@ -12,10 +12,10 @@ import pandas as pd
 
 from data.generator import generate_msme_ledger
 from engine import run_runway_pipeline
-from funding import (ACCEPTED, COUNTERED, DECLINED, DEMO_LENDERS, WAITING, WITHDRAWN, LendingNetwork,
+from funding import (ACCEPTED, COUNTERED, DECLINED, DEMO_LENDERS, WAITING, WITHDRAWN, DemoRooms, LendingNetwork,
                      apply_loans, calendar_ics, check_loan, credit_dips, credit_sources, fit_checks, fits, interest,
-                     lending_effect, loan_path, pick_security, safe_to_lend, split_amount, suggest_repay_day,
-                     term_sheet, treds_invoices)
+                     lending_effect, loan_path, new_room_code, pick_security, safe_to_lend, split_amount,
+                     suggest_repay_day, term_sheet, treds_invoices, valid_room)
 
 
 class TestLoanMaths(unittest.TestCase):
@@ -220,6 +220,42 @@ class TestLendingNetwork(unittest.TestCase):
         for part in ("Ganga Castings Pvt Ltd", "Rs 5.00 lakh", "12.00% a year", "02 Feb 2026", "INV-1",
                      "Sec 186", "74%"):
             self.assertIn(part, text)
+
+
+class TestDemoRooms(unittest.TestCase):
+    """Each demo link gets its own network, so visitors to the public URL never change each other's demo."""
+
+    KW = dict(borrower="Borrower Pvt Ltd", owner="Raghav", borrower_note="test", amount=1_000_000, rate=0.12,
+              start=pd.Timestamp("2026-01-06"), repay=pd.Timestamp("2026-02-02"), interest=8_877.0, check=None)
+
+    def test_same_code_shares_a_network_and_other_codes_do_not(self):
+        rooms = DemoRooms()
+        mine, again, stranger = rooms.get("stage"), rooms.get("stage"), rooms.get("k3f9qa")
+        self.assertIs(mine, again)
+        r = stranger.send(lender_id="ganga", **self.KW)
+        stranger.respond(r.rid, "accept")
+        self.assertEqual(mine.requests(lender_id="ganga"), [])
+        self.assertEqual(mine.lender("ganga").available, DEMO_LENDERS[0].available)
+        self.assertEqual(len(stranger.requests(lender_id="ganga")), 1)
+
+    def test_least_recently_used_rooms_are_dropped(self):
+        rooms = DemoRooms(max_rooms=3)
+        for code in ("aaa", "bbb", "ccc"):
+            rooms.get(code)
+        rooms.get("aaa")                   # used again, so "bbb" is now the oldest
+        rooms.get("ddd")
+        self.assertEqual(len(rooms), 3)
+        self.assertNotIn("bbb", rooms)
+        self.assertIn("aaa", rooms)
+
+    def test_room_codes(self):
+        codes = {new_room_code() for _ in range(200)}
+        self.assertGreater(len(codes), 190)
+        self.assertTrue(all(valid_room(c) and len(c) == 6 for c in codes))
+        for bad in ("", None, "ab", "UPPER", "has space", "x" * 17, "<script>"):
+            self.assertFalse(valid_room(bad), bad)
+        with self.assertRaises(ValueError):
+            DemoRooms().get("../etc")
 
 
 class TestCalendar(unittest.TestCase):

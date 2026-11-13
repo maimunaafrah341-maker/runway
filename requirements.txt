@@ -1,6 +1,6 @@
 # Streamlit Cloud reinstalls and restarts the app whenever this file changes. A push that only edits
 # engine/, assistant/, data/ or funding/ may keep old copies of those modules in memory: reboot the app
-# (Manage app -> Reboot) or touch this file. A restart also clears the demo lending network.
+# (Manage app -> Reboot) or touch this file. A restart also clears every private demo (?room=) network.
 numpy>=1.24.0
 pandas>=2.0.0,<3.0.0
 lifelines>=0.28.0

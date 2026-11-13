@@ -2,10 +2,11 @@
 The lending network: businesses with spare cash, the conditions they lend on, and the requests between
 them and a business that needs cash.
 
-One LendingNetwork object is shared by every browser session on the server (the app keeps it in
-st.cache_resource), so a request Raghav sends appears in the lender's window within seconds, and the
-lender's answer appears in Raghav's. It lives in memory, so a restart clears it; that suits a demo, and a
-real deployment would keep it in a database.
+Each demo link has its own LendingNetwork (DemoRooms, keyed by the link's ?room= code and kept in
+st.cache_resource), so a request Raghav sends appears in the lender's window within seconds and the answer
+comes back, while other people trying the same public URL get their own private demo and never see or
+change it. It lives in memory, so a restart clears it; that suits a demo, and a real deployment would keep
+it in a database.
 
 Runway never lends, holds or moves money here. It shares the borrower's cash-flow check (with consent),
 drafts the terms, and the two companies sign and pay each other directly.
@@ -13,8 +14,11 @@ drafts the terms, and the two companies sign and pay each other directly.
 from __future__ import annotations
 
 import itertools
+import re
+import secrets
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -231,6 +235,51 @@ class LendingNetwork:
 
     def withdraw(self, rid: str) -> LoanRequest:
         return self._update(rid, OPEN_STATUSES, status=WITHDRAWN)
+
+
+# --------------------------------------------------------------------------- #
+# Demo rooms: one private network per demo link, so visitors to a public URL never share requests
+# --------------------------------------------------------------------------- #
+_ROOM_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"      # no 0/o, 1/l/i: easy to read out and type
+_ROOM_PATTERN = re.compile(r"[a-z0-9]{3,16}")
+
+
+def new_room_code(length: int = 6) -> str:
+    return "".join(secrets.choice(_ROOM_ALPHABET) for _ in range(length))
+
+
+def valid_room(code: Optional[str]) -> bool:
+    return bool(code) and _ROOM_PATTERN.fullmatch(code) is not None
+
+
+class DemoRooms:
+    """A LendingNetwork per room code. Windows opened with the same code see the same requests; any other
+    code (another visitor) gets a fresh, empty network. Beyond `max_rooms`, the least recently used go."""
+
+    def __init__(self, max_rooms: int = 500):
+        self.max_rooms = max_rooms
+        self._lock = threading.Lock()
+        self._rooms: "OrderedDict[str, LendingNetwork]" = OrderedDict()
+
+    def get(self, code: str) -> LendingNetwork:
+        if not valid_room(code):
+            raise ValueError(f"not a room code: {code!r}")
+        with self._lock:
+            net = self._rooms.pop(code, None)
+            if net is None:
+                net = LendingNetwork()
+            self._rooms[code] = net
+            while len(self._rooms) > self.max_rooms:
+                self._rooms.popitem(last=False)
+            return net
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._rooms)
+
+    def __contains__(self, code: str) -> bool:
+        with self._lock:
+            return code in self._rooms
 
 
 # --------------------------------------------------------------------------- #
