@@ -912,8 +912,7 @@ with k1:
         f"""
         <div class="kpi-card" style="border-bottom: 2px solid #00E5FF;">
             <div class="kpi-label" title="Closing bank balance on the forecast date, from the ledger.">Cash balance today</div>
-            <div class="kpi-value">{inr(cash_today)}</div>
-            {delta_html}
+            <div class="kpi-value">{inr(cash_today)}</div>{delta_html}
             <div class="kpi-plain">Money in the bank on {as_of:%b %d}.</div>
         </div>
         """,
@@ -980,8 +979,7 @@ with tab_predict:
                 <span style="background: rgba(0, 229, 255, 0.12); color: #00E5FF; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; margin-left: 8px; border: 1px solid rgba(0, 229, 255, 0.3);">{N_SIMULATIONS:,} SIMULATIONS</span>
             </div>
             <div style="display: flex; gap: 20px; font-size: 12.5px; color: #CBD5E1; flex-wrap: wrap;">
-                <span><span style="color: #00E5FF; font-weight: bold; margin-right: 4px;">━</span> Typical outcome (median)</span>
-                {loan_legend}
+                <span><span style="color: #00E5FF; font-weight: bold; margin-right: 4px;">━</span> Typical outcome (median)</span>{loan_legend}
                 <span><span style="background: rgba(0, 229, 255, 0.25); padding: 0 8px; border-radius: 2px; margin-right: 4px;">&nbsp;</span> 8 in 10 outcomes fall here</span>
                 <span><span style="color: #EF4444; margin-right: 4px;">┄┄</span> ₹0: can't pay bills</span>
             </div>
