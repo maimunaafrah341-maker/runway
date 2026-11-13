@@ -20,6 +20,7 @@ causing it, and what to do first** — ranked in rupees.
 | **Act** | *What should I do first?* | Every candidate action ranked by `E[shortfall avoided] − cost of action` |
 | **Prove** | *Is it better than a spreadsheet?* | Rolling no-look-ahead backtest against 3 baselines, scored by Brier score and warning lead time |
 | **Ask** | *Can I legally charge this customer interest?* | RAG over the MSMED Act 2006 + the business's own invoices; Gemini or Claude writes the answer online, a built-in answer works offline |
+| **Fund / Lend** | *Where do I get the ₹31.6 L, and who will lend it?* | Credit sources compared for this exact loan; businesses with spare cash (each with its own Runway dashboard and a Lend tab) get the request with a notification and only the on-time score the borrower chose to share |
 
 ---
 
@@ -54,6 +55,34 @@ invoices: *"Can I legally charge Vindhya interest?"* → ₹29,582 so far, with 
 
 ![Ask tab: legal assistant answering an interest question with cited sections](docs/screenshots/05-ask.png)
 
+**6 · Fund: where do I get the credit?** How much (₹31.60 L), by when (Jan 06) and for how long (repay
+Feb 02, 27 days), then every realistic source priced for this loan: TReDS invoice sale, bank cash-credit
+top-up, a loan from a business with spare cash, an NBFC loan. Raghav sets his terms and sees exactly what
+a lender will see; Runway shows which lenders the terms suit (and which condition fails for the others),
+then sends the request. He sees each lender's name, business and published terms, never its balance or
+forecast. Answers and counter-offers arrive in the bell at the top.
+
+![Fund tab: four steps from the need to the requests](docs/screenshots/06-fund.png)
+
+**Once lenders say yes, the dashboard changes.** The headline, the "Do this first" bar, the 30-day risk card
+(89% → 10% with the loans) and the forecast chart (a dashed "with the agreed loans" line) all update on
+their own, and tab 6 becomes **Your loan plan**: when the money arrives, the bills it protects, what to repay
+to whom and when, a dated to-do table, term sheets, and an "Add these dates to my calendar" file (.ics) with
+a reminder the day before each date.
+
+![Loan plan after both lenders agree: arrival, bills, repayment, dated to-do list](docs/screenshots/06b-loan-plan.png)
+
+**The lender's side: the same dashboard, with a Lend tab.** Every lender is a Runway business too
+(`?as=ganga`, or *Signed in as* at the top), with its own generated ledger and forecast, so Runway knows how
+much it can safely lend (₹27.37 L for 45 days for Ganga Castings, keeping ₹5 L in the bank in 9 of 10
+futures). A request that fits its conditions lights up the bell, where it can be accepted in one click. The
+Lend tab shows the terms, the borrower's on-time score (only if shared), a summary of pledged invoices
+(customer names only after accepting) and what the loan does to the lender's own shortfall risk. After
+accepting, it shows the lender's loan book: when to pay out, when the money comes back, the interest, and
+the same calendar file.
+
+![Lend tab: safe amount to lend, request with what the borrower shared, lending conditions](docs/screenshots/07-lend.png)
+
 ---
 
 ## Sample output (synthetic demo company, as of 1 Jan 2026)
@@ -65,6 +94,8 @@ Likely shortfall     Day 6 – Day 9  (wages on the 7th + raw-material payment o
 Top risk driver      INV-2025-0240, Vindhya Engineering, ₹3.90 L  → paying it cuts 30d risk by 6.0 pts
 Best action          2% early-payment discount on INV-2025-0357 (Brahmaputra Mobility)
                      avoids ₹3.79 L of expected shortfall for ₹15,900 → net ₹3.63 L
+Credit to arrange    ₹31.60 L by Jan 06, repay Feb 02 (27 days, ₹28,050 at 12%)
+                     repayment in the bank on time in 74% of futures; risk to Feb 08: 89% → 32%
 ```
 
 ---
@@ -114,6 +145,7 @@ company data.
 | `python -m unittest tests.test_security_and_edge_cases -v` | Input sanitizer + engine edge cases (6 tests) | <1 s |
 | `python -m unittest tests.test_assistant -v` | Legal assistant: interest maths, retrieval, offline answers (15 tests) | <1 s |
 | `python -m unittest tests.test_engine_extras -v` | Joint "these invoices paid on time" risk (4 tests) | ~5 s |
+| `python -m unittest tests.test_funding -v` | Fund / Lend: loan checks, safe-to-lend, several loans at once, security, credit sources, lending network, calendar file (21 tests) | ~5 s |
 
 Run them from the repository root.
 
@@ -246,6 +278,46 @@ The *Ask* tab answers questions such as *"Can I legally charge Vindhya interest?
 Every answer lists its sources, with the statute text and the ledger numbers it used. The cash forecast
 itself never uses an LLM.
 
+### 8. Funding the gap — [`funding/`](funding/)
+The *Fund* tab turns "arrange ₹31.56 L of credit" into where to get it and who will lend it. Lenders are
+Runway businesses too: each has its own generated ledger (a different generator seed plus spare opening
+cash), its own dashboard and a *Lend* tab in place of *Fund*.
+
+- **How much, from when, for how long** ([`plan.py`](funding/plan.py)). The amount is the worst 1-in-10 low
+  over 30 days (rounded up), needed a day before the first likely crunch. The repay date is the one that
+  keeps the most simulated futures above ₹0 from the loan's start until a week *after* repaying, so the
+  repayment does not just move the crunch to the next wage day. Every loan is checked on the same 5,000
+  futures: the **on-time score** (share of futures with the full repayment in the bank on the date) and the
+  shortfall risk with and without the loan.
+- **Where to get it.** TReDS invoice sale (undisputed, not-yet-due invoices on Tier-1 OEM buyers), a bank
+  cash-credit top-up, a loan from a business with spare cash, and an NBFC loan, each priced for this loan
+  and marked by whether the money can arrive in time. Rates and timings are typical ranges, not quotes.
+- **Security.** For each lender, the invoices most likely to be paid before the repay date are pledged until
+  they are worth 125% of what is owed; Runway reports in what share of futures they alone would repay it.
+  No invoice is pledged twice.
+- **Safe to lend.** For a lender, the 1-in-10 lowest balance over its longest loan period minus a ₹5 L
+  cushion: lending that much still keeps ₹5 L in the bank in 9 of 10 of its own futures. Each request also
+  shows the lender its own 60-day shortfall risk with and without the loan.
+- **The lending network** ([`network.py`](funding/network.py)). Four fictional companies with spare cash,
+  each with its own conditions (amount, longest loan, lowest rate, security, lowest on-time score). Requests
+  are split across the lenders that fit, cheapest first. One thread-safe in-memory store is shared by every
+  browser session (`st.cache_resource`). A notification bell in the header of both dashboards polls it
+  every 3 s: a toast and a count for anything new, and one-click answers (accept, decline, accept a
+  counter-offer) without leaving the current tab. An accepted request produces a term sheet.
+- **Privacy, both ways.** A lender sees the borrower's name, the terms, the on-time score (only if the
+  borrower turns sharing on) and a count, total and cover of pledged invoices. Customer names on those
+  invoices appear only after the lender accepts, because the pledge must name them. A borrower sees a
+  lender's name, business and published terms. Neither side sees the other's ledger, balance or forecast,
+  and the Fund tab shows the borrower exactly what will be sent before sending.
+- **After a deal.** `apply_loans()` adds every agreed loan to the same simulated futures (money in on the
+  start day, out with interest on the repay day; the reverse for a lender), so the 30-day risk, the chart
+  and the loan plan are recomputed, not described. The notification bell notices a new agreement and
+  redraws the whole dashboard. `calendar_ics()` turns the dated to-do list into a calendar file.
+- **Rules it follows.** Runway never lends, holds or moves money. A company-to-company loan needs the lender
+  board's approval and a rate not below the government-bond yield for a similar period (Companies Act 2013,
+  Sec 186), and a pledge of invoices is a charge to register within 30 days (Sec 77). RBI's P2P rules cap a
+  borrower at ₹10 lakh across platforms, which is why this is a direct company-to-company loan.
+
 ---
 
 ## Repository layout
@@ -253,7 +325,12 @@ itself never uses an LLM.
 ```
 runway/
 ├── demo.py                    CLI walkthrough of Predict → Explain → Act
-├── app/main.py                Streamlit dashboard (Predict / Explain / Act / Proof / Ask tabs)
+├── app/main.py                Streamlit dashboard (Predict / Explain / Act / Proof / Ask, then Fund or
+│                              Lend); ?as=<business> signs in as Raghav or one of the lenders
+├── funding/
+│   ├── plan.py                Loan check on the simulated futures, repay date, safe-to-lend, security,
+│                              credit sources
+│   └── network.py             Lenders, requests, answers and term sheets (shared in-memory store)
 ├── assistant/
 │   ├── legal_corpus.py        MSMED Act 2006 text (Secs 2, 8, 15–24) + dated notes
 │   ├── retriever.py           BM25 search with everyday / Hinglish synonyms
@@ -293,6 +370,10 @@ runway/
   Written objections by the buyer (which delay the clock) are not in the data.
 - The forecast ignores new sales made after the ledger date and credit lines already in place, so it
   leans cautious.
+- The lending network is a demo: four fictional lenders with generated ledgers, kept in memory (a restart
+  clears it) and shared by everyone using the same server. *Signed in as* switches company without a
+  login; a real deployment needs accounts. Credit-source rates and timings are typical ranges, not quotes.
+  Run for real, the matching would go through an RBI-regulated partner.
 
 ## What's next
 
@@ -301,3 +382,5 @@ runway/
 - **Real ledgers:** Tally / Zoho import through the existing sanitizer.
 - **Learned action effects:** replace the stated assumptions with each buyer's observed responses.
 - **Weekly risk trend** and a **cash-bridge view** of the crunch week; TReDS invoice discounting as an action.
+- **A real lending network:** verified lenders in a database, e-signed loan agreements, and email or
+  WhatsApp notifications alongside the in-app ones.
