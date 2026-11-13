@@ -143,10 +143,12 @@ class TestLendingNetwork(unittest.TestCase):
 
     def test_split_fills_cheapest_first(self):
         lenders = [self.net.lender("pennar"), self.net.lender("ganga")]
-        parts = split_amount(3_160_000, lenders)
-        self.assertEqual([(x.lid, p) for x, p in parts], [("ganga", 2_000_000), ("pennar", 1_160_000)])
+        parts = split_amount(3_160_000, lenders)                 # Ganga (cheapest) covers it alone
+        self.assertEqual([(x.lid, p) for x, p in parts], [("ganga", 3_160_000)])
+        parts = split_amount(4_000_000, lenders)
+        self.assertEqual([(x.lid, p) for x, p in parts], [("ganga", 3_200_000), ("pennar", 800_000)])
         parts = split_amount(5_000_000, lenders)
-        self.assertEqual(sum(p for _, p in parts), 3_500_000)    # not enough between them
+        self.assertEqual(sum(p for _, p in parts), 4_700_000)    # not enough between them
         self.assertEqual(split_amount(0, lenders), [])
 
     def test_request_accept_reduces_available(self):
@@ -156,7 +158,7 @@ class TestLendingNetwork(unittest.TestCase):
         done = self.net.respond(r.rid, "accept")
         self.assertEqual(done.status, ACCEPTED)
         self.assertEqual(done.agreed_rate, 0.12)
-        self.assertEqual(self.net.lender("ganga").available, 500_000)
+        self.assertEqual(self.net.lender("ganga").available, 1_700_000)
         with self.assertRaises(ValueError):
             self.net.respond(r.rid, "decline")                   # already answered
 

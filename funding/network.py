@@ -43,7 +43,7 @@ class Lender:
 DEMO_LENDERS: Tuple[Lender, ...] = (
     Lender("ganga", "Ganga Castings Pvt Ltd", "Meera Rao", "Coimbatore", "Aluminium castings",
            "Two OEMs paid a quarter's invoices early and the next furnace upgrade is in March.",
-           2_000_000, 45, 0.110, True, 0.70),
+           3_200_000, 45, 0.110, True, 0.70),
     Lender("pennar", "Pennar Polymers Pvt Ltd", "Arjun Reddy", "Nellore", "Plastic auto parts",
            "A customer paid an advance and a machine purchase moved to February.",
            1_500_000, 30, 0.115, False, 0.65),

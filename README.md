@@ -74,7 +74,7 @@ a reminder the day before each date.
 
 **The lender's side: the same dashboard, with a Lend tab.** Every lender is a Runway business too
 (`?as=ganga`, or *Signed in as* at the top), with its own generated ledger and forecast, so Runway knows how
-much it can safely lend (₹27.37 L for 45 days for Ganga Castings, keeping ₹5 L in the bank in 9 of 10
+much it can safely lend (₹37.37 L for 45 days for Ganga Castings, keeping ₹5 L in the bank in 9 of 10
 futures). A request that fits its conditions lights up the bell, where it can be accepted in one click. The
 Lend tab shows the terms, the borrower's on-time score (only if shared), a summary of pledged invoices
 (customer names only after accepting) and what the loan does to the lender's own shortfall risk. After

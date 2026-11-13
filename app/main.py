@@ -79,7 +79,7 @@ class Business:
     lender_id: Optional[str] = None
 
 
-_LENDER_LEDGERS = {"ganga": (11, 3_000_000), "pennar": (7, 1_500_000), "yamuna": (21, 5_000_000),
+_LENDER_LEDGERS = {"ganga": (11, 4_000_000), "pennar": (7, 1_500_000), "yamuna": (21, 5_000_000),
                    "palar": (33, 2_000_000)}
 BORROWER_KEY = "sri-lakshmi"
 BUSINESSES = {BORROWER_KEY: Business(BORROWER_KEY, "Sri Lakshmi Auto Components Pvt Ltd", "Raghav", 42)}
